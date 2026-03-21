@@ -94,7 +94,7 @@
   /* Tiers */
   .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; width: 100%; max-width: 900px; margin-top: 40px; }
   .tier-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; text-align: center; position: relative; overflow: hidden; }
-  .tier-card.recommended::before { content: 'POPULAR'; position: absolute; top: 12px; right: -24px; background: linear-gradient(135deg, var(--amber), var(--gold)); color: #0a0a0d; font-size: 9px; font-weight: 700; padding: 3px 30px; transform: rotate(45deg); letter-spacing: 1px; }
+  /* POPULAR ribbon removed */
   .tier-card .tier-name { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
   .tier-card .tier-desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px; }
   .tier-card .tier-tag { font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px; display: inline-block; }
@@ -336,7 +336,7 @@
       <div class="tier-desc">PRs created automatically. You review and merge manually. Full control.</div>
       <div class="tier-tag" style="background:rgba(245,177,74,0.15);color:var(--amber);">Default for production apps</div>
     </div>
-    <div class="tier-card recommended">
+    <div class="tier-card">
       <div style="font-size:32px;margin-bottom:12px;">⚡</div>
       <div class="tier-name">Semi-Auto</div>
       <div class="tier-desc">PRs auto-merge when CI passes and review agent approves. You monitor.</div>
