@@ -317,8 +317,39 @@ export async function GET(
       });
     }
 
-    console.log('[Planning Poll] No new messages found');
-    return NextResponse.json({ hasUpdates: false });
+    // FALLBACK: Check if the last stored message is actually a completion that was
+    // saved but never processed (race condition where message was stored but
+    // extractJSON failed or the completion handler never fired).
+    const lastAssistantMsg = [...messages].reverse().find((m: any) => m.role === 'assistant');
+    if (lastAssistantMsg) {
+      const parsed = extractJSON(lastAssistantMsg.content) as { status?: string; spec?: object; agents?: any[]; execution_plan?: object } | null;
+      if (parsed && parsed.status === 'complete') {
+        console.log('[Planning Poll] FALLBACK: Found unprocessed completion in stored messages — handling now');
+        const { firstAgentId, parsed: fullParsed, dispatchError } = await handlePlanningCompletion(taskId, parsed, messages);
+        return NextResponse.json({
+          hasUpdates: true,
+          complete: true,
+          spec: fullParsed.spec,
+          agents: fullParsed.agents,
+          executionPlan: fullParsed.execution_plan,
+          messages,
+          autoDispatched: !!firstAgentId,
+          dispatchError,
+        });
+      }
+    }
+
+    // Check for stale planning — if no new messages for >10 minutes, flag it
+    const lastMsgTimestamp = messages.length > 0 ? messages[messages.length - 1].timestamp : null;
+    const stalePlanningMs = 10 * 60 * 1000; // 10 minutes
+    const isStalePlanning = lastMsgTimestamp && (Date.now() - lastMsgTimestamp) > stalePlanningMs;
+
+    console.log('[Planning Poll] No new messages found', isStalePlanning ? '(STALE — over 10min since last message)' : '');
+    return NextResponse.json({ 
+      hasUpdates: false,
+      stalePlanning: isStalePlanning || undefined,
+      staleSinceMs: isStalePlanning ? (Date.now() - lastMsgTimestamp) : undefined,
+    });
   } catch (error) {
     console.error('Failed to poll for updates:', error);
     return NextResponse.json({ error: 'Failed to poll for updates' }, { status: 500 });

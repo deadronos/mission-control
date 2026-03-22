@@ -331,6 +331,55 @@ export function MissionQueue({ workspaceId, mobileMode = false, isPortrait = tru
   );
 }
 
+function AssignedStatusBadge({ task, portraitMode }: { task: Task; portraitMode: boolean }) {
+  const [retrying, setRetrying] = useState(false);
+  const updatedAt = new Date(task.updated_at).getTime();
+  const staleMs = Date.now() - updatedAt;
+  const isStale = staleMs > 2 * 60 * 1000; // 2 minutes
+
+  const handleRetryDispatch = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't open the task modal
+    setRetrying(true);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/dispatch`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Retry dispatch failed:', data.error);
+      }
+    } catch (err) {
+      console.error('Retry dispatch error:', err);
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  if (isStale) {
+    const staleMinutes = Math.floor(staleMs / 60000);
+    return (
+      <div className={`${portraitMode ? 'mb-3 py-2 px-3' : 'mb-2 py-1.5 px-2.5'} bg-amber-500/10 rounded-md border border-amber-500/30`}>
+        <div className="flex items-center gap-2 mb-1.5">
+          <div className="w-2 h-2 bg-amber-400 rounded-full flex-shrink-0" />
+          <span className="text-xs text-amber-200">Stuck in assigned for {staleMinutes}m</span>
+        </div>
+        <button
+          onClick={handleRetryDispatch}
+          disabled={retrying}
+          className="text-[11px] px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded border border-amber-500/30 disabled:opacity-50"
+        >
+          {retrying ? 'Dispatching...' : '↻ Retry Dispatch'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex items-center gap-2 ${portraitMode ? 'mb-3 py-2 px-3' : 'mb-2 py-1.5 px-2.5'} bg-yellow-500/10 rounded-md border border-yellow-500/30`}>
+      <div className="w-2 h-2 bg-yellow-400 rounded-full flex-shrink-0" />
+      <span className="text-xs text-yellow-200">Assigned and validating — auto-start will move this to In Progress.</span>
+    </div>
+  );
+}
+
 interface TaskCardProps {
   task: Task;
   onDragStart: (e: React.DragEvent, task: Task) => void;
@@ -408,10 +457,7 @@ function TaskCard({ task, onDragStart, onClick, onMoveStatus, isDragging, mobile
         )}
 
         {isAssigned && !dispatchError && (
-          <div className={`flex items-center gap-2 ${portraitMode ? 'mb-3 py-2 px-3' : 'mb-2 py-1.5 px-2.5'} bg-yellow-500/10 rounded-md border border-yellow-500/30`}>
-            <div className="w-2 h-2 bg-yellow-400 rounded-full flex-shrink-0" />
-            <span className="text-xs text-yellow-200">Assigned and validating — auto-start will move this to In Progress.</span>
-          </div>
+          <AssignedStatusBadge task={task} portraitMode={portraitMode} />
         )}
 
         {task.status === 'inbox' && !task.assigned_agent_id && (
