@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extractGatewayAgents,
+  extractGatewaySessions,
   normalizeGatewayAgent,
   normalizeGatewayModel,
 } from './gateway-compat';
@@ -14,6 +15,16 @@ test('extractGatewayAgents supports current gateway envelope', () => {
 
   assert.equal(result.length, 2);
   assert.deepEqual(result[0], { id: 'main' });
+});
+
+test('extractGatewaySessions supports current gateway envelope', () => {
+  const result = extractGatewaySessions({
+    count: 1,
+    sessions: [{ key: 'agent:main:main' }],
+  });
+
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0], { key: 'agent:main:main' });
 });
 
 test('normalizeGatewayAgent handles modern OpenClaw agent payloads', () => {

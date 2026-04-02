@@ -362,11 +362,13 @@ export interface OpenClawMessage {
 }
 
 export interface OpenClawSessionInfo {
-  id: string;
-  channel: string;
+  id?: string;
+  key?: string;
+  sessionId?: string;
+  channel?: string;
   peer?: string;
   model?: string;
-  status: string;
+  status?: string;
 }
 
 // OpenClaw history message format (from Gateway)

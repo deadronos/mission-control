@@ -27,7 +27,10 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     // List sessions and find the one with matching ID
     const sessions = await client.listSessions();
-    const session = sessions.find((s) => s.id === id);
+    const session = sessions.find((s) => {
+      const candidate = s as Record<string, unknown>;
+      return candidate.id === id || candidate.key === id || candidate.sessionId === id;
+    });
 
     if (!session) {
       return NextResponse.json(

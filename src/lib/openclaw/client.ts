@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import type { OpenClawMessage, OpenClawSessionInfo } from '../types';
 import { loadOrCreateDeviceIdentity, signDevicePayload, buildDeviceAuthPayload, publicKeyRawBase64Url } from './device-identity';
 import { createHash } from 'crypto';
-import { extractGatewayAgents } from './gateway-compat';
+import { extractGatewayAgents, extractGatewaySessions } from './gateway-compat';
 
 // Types for gateway model discovery (matches OpenClaw models.list response)
 export interface GatewayModelChoice {
@@ -466,7 +466,8 @@ export class OpenClawClient extends EventEmitter {
 
   // Session management methods
   async listSessions(): Promise<OpenClawSessionInfo[]> {
-    return this.call<OpenClawSessionInfo[]>('sessions.list');
+    const result = await this.call<unknown>('sessions.list');
+    return extractGatewaySessions(result) as OpenClawSessionInfo[];
   }
 
   async getSessionHistory(sessionId: string): Promise<unknown[]> {

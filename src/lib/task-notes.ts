@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { queryOne, queryAll, run } from '@/lib/db';
 import { broadcast } from '@/lib/events';
 import { getOpenClawClient } from '@/lib/openclaw/client';
+import { buildOpenClawSessionKey } from '@/lib/openclaw/session-routing';
 import type { TaskNote, OpenClawSession, Agent } from '@/lib/types';
 
 /**
@@ -98,8 +99,7 @@ export async function deliverPendingNotesAtCheckpoint(taskId: string): Promise<n
 
     // Get the agent's session key prefix
     const agent = queryOne<Agent>('SELECT * FROM agents WHERE id = ?', [activeSession.agent_id]);
-    const prefix = agent?.session_key_prefix || 'agent:main:';
-    const sessionKey = `${prefix}${activeSession.openclaw_session_id}`;
+    const sessionKey = buildOpenClawSessionKey(agent, activeSession.openclaw_session_id);
 
     // Build the message
     const lines = notes.map(n => `- ${n.content}`);
@@ -161,8 +161,7 @@ export function getActiveSessionForTask(taskId: string): { session: OpenClawSess
   if (!session) return null;
 
   const agent = queryOne<Agent>('SELECT * FROM agents WHERE id = ?', [session.agent_id]);
-  const prefix = agent?.session_key_prefix || 'agent:main:';
-  const sessionKey = `${prefix}${session.openclaw_session_id}`;
+  const sessionKey = buildOpenClawSessionKey(agent, session.openclaw_session_id);
 
   return { session, sessionKey };
 }

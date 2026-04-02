@@ -8,6 +8,7 @@
 import { queryOne, queryAll, run } from '@/lib/db';
 import { getMissionControlUrl } from '@/lib/config';
 import { getOpenClawClient } from '@/lib/openclaw/client';
+import { buildOpenClawSessionKey, getDefaultOpenClawSessionId } from '@/lib/openclaw/session-routing';
 import type { KnowledgeEntry, TaskRole, OpenClawSession } from '@/lib/types';
 
 /**
@@ -86,7 +87,10 @@ Focus on:
       // Create session for learner if needed
       const { v4: uuidv4 } = await import('uuid');
       const sessionId = uuidv4();
-      const openclawSessionId = `mission-control-${learnerRole.agent_name.toLowerCase().replace(/\s+/g, '-')}`;
+      const openclawSessionId = getDefaultOpenClawSessionId({
+        name: learnerRole.agent_name,
+        session_key_prefix: learnerRole.session_key_prefix,
+      });
 
       run(
         `INSERT INTO openclaw_sessions (id, agent_id, openclaw_session_id, channel, status, created_at, updated_at)
@@ -98,8 +102,13 @@ Focus on:
     }
 
     if (session) {
-      const prefix = learnerRole.session_key_prefix || 'agent:main:';
-      const sessionKey = `${prefix}${session.openclaw_session_id}`;
+      const sessionKey = buildOpenClawSessionKey(
+        {
+          name: learnerRole.agent_name,
+          session_key_prefix: learnerRole.session_key_prefix,
+        },
+        session.openclaw_session_id
+      );
       await client.call('chat.send', {
         sessionKey,
         message: learningMessage,

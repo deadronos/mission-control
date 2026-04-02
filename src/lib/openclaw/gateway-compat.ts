@@ -105,6 +105,34 @@ export function extractGatewayAgents(result: unknown): unknown[] {
   return [];
 }
 
+export function extractGatewaySessions(result: unknown): unknown[] {
+  if (Array.isArray(result)) {
+    return result;
+  }
+
+  const record = asRecord(result);
+  if (!record) {
+    return [];
+  }
+
+  const directSessions = record.sessions;
+  if (Array.isArray(directSessions)) {
+    return directSessions;
+  }
+
+  const items = record.items;
+  if (Array.isArray(items)) {
+    return items;
+  }
+
+  const nestedResult = asRecord(record.result);
+  if (nestedResult?.sessions && Array.isArray(nestedResult.sessions)) {
+    return nestedResult.sessions;
+  }
+
+  return [];
+}
+
 export function normalizeGatewayAgent(agent: unknown): NormalizedGatewayAgent | null {
   const record = asRecord(agent);
   if (!record) {

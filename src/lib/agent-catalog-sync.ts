@@ -1,6 +1,7 @@
 import { queryAll, queryOne, run, transaction } from '@/lib/db';
 import { getOpenClawClient } from '@/lib/openclaw/client';
 import { normalizeGatewayAgent } from '@/lib/openclaw/gateway-compat';
+import { getDefaultSessionKeyPrefix } from '@/lib/openclaw/session-routing';
 
 const SYNC_INTERVAL_MS = Number(process.env.AGENT_CATALOG_SYNC_INTERVAL_MS || 60_000);
 let lastSyncAt = 0;
@@ -49,17 +50,21 @@ export async function syncGatewayAgentsToCatalog(options?: { force?: boolean; re
         const name = ga.name;
         const role = normalizeRole(name);
         const existingId = existingByGatewayId.get(gatewayId) || null;
+        const defaultSessionKeyPrefix = getDefaultSessionKeyPrefix({ gateway_agent_id: gatewayId });
 
         if (existingId) {
           run(
-            `UPDATE agents SET name = ?, role = ?, model = COALESCE(?, model), source = 'gateway', updated_at = ? WHERE id = ?`,
-            [name, role, ga.model || null, ts, existingId]
+            `UPDATE agents
+             SET name = ?, role = ?, model = COALESCE(?, model), source = 'gateway',
+                 session_key_prefix = COALESCE(session_key_prefix, ?), updated_at = ?
+             WHERE id = ?`,
+            [name, role, ga.model || null, defaultSessionKeyPrefix, ts, existingId]
           );
         } else {
           run(
-            `INSERT INTO agents (id, name, role, description, avatar_emoji, is_master, workspace_id, model, source, gateway_agent_id, created_at, updated_at)
-             VALUES (lower(hex(randomblob(16))), ?, ?, ?, '🔗', 0, 'default', ?, 'gateway', ?, ?, ?)`,
-            [name, role, `Auto-synced from OpenClaw (${gatewayId})`, ga.model || null, gatewayId, ts, ts]
+            `INSERT INTO agents (id, name, role, description, avatar_emoji, is_master, workspace_id, model, source, gateway_agent_id, session_key_prefix, created_at, updated_at)
+             VALUES (lower(hex(randomblob(16))), ?, ?, ?, '🔗', 0, 'default', ?, 'gateway', ?, ?, ?, ?)`,
+            [name, role, `Auto-synced from OpenClaw (${gatewayId})`, ga.model || null, gatewayId, defaultSessionKeyPrefix, ts, ts]
           );
         }
         changed += 1;

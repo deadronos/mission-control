@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { queryOne, queryAll, run } from '@/lib/db';
 import { getOpenClawClient } from '@/lib/openclaw/client';
 import { broadcast } from '@/lib/events';
-import { getProjectsPath, getMissionControlUrl } from '@/lib/config';
+import { getMissionControlUrl } from '@/lib/config';
 import { getRelevantKnowledge, formatKnowledgeForDispatch } from '@/lib/learner';
 import { getTaskWorkflow } from '@/lib/workflow-engine';
 import { syncGatewayAgentsToCatalog } from '@/lib/agent-catalog-sync';
@@ -12,6 +12,7 @@ import { buildCheckpointContext } from '@/lib/checkpoint';
 import { formatMailForDispatch } from '@/lib/mailbox';
 import { getPendingNotesForDispatch } from '@/lib/task-notes';
 import { createTaskWorkspace, determineIsolationStrategy } from '@/lib/workspace-isolation';
+import { buildOpenClawSessionKey, getDefaultOpenClawSessionId } from '@/lib/openclaw/session-routing';
 import type { Task, Agent, Product, OpenClawSession, WorkflowStage, TaskImage } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (!session) {
       // Create session record
       const sessionId = uuidv4();
-      const openclawSessionId = `mission-control-${agent.name.toLowerCase().replace(/\s+/g, '-')}`;
+      const openclawSessionId = getDefaultOpenClawSessionId(agent);
       
       run(
         `INSERT INTO openclaw_sessions (id, agent_id, openclaw_session_id, channel, status, created_at, updated_at)
@@ -190,9 +191,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }[task.priority] || '⚪';
 
     // Get project path for deliverables — with workspace isolation if needed
-    const projectsPath = getProjectsPath();
-    const projectDir = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    let taskProjectDir = `${projectsPath}/${projectDir}`;
+    let taskProjectDir = task.workspace_path || '';
     const missionControlUrl = getMissionControlUrl();
 
     // Create isolated workspace if parallel builds are possible
@@ -202,11 +201,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     let workspacePort: number | undefined;
     const isolationStrategy = determineIsolationStrategy(task as Task);
     const isBuilderDispatch = task.status === 'assigned' || task.status === 'in_progress' || task.status === 'inbox';
-    if (isolationStrategy && isBuilderDispatch) {
+    if (isBuilderDispatch) {
       try {
         const workspace = await createTaskWorkspace(task as Task);
         taskProjectDir = workspace.path;
-        workspaceIsolated = true;
+        workspaceIsolated = Boolean(isolationStrategy);
         workspaceBranchName = workspace.branch;
         workspacePort = workspace.port;
         console.log(`[Dispatch] Created ${workspace.strategy} workspace for task ${task.id}: ${workspace.path}`);
@@ -437,8 +436,7 @@ If you need help or clarification, ask the orchestrator.`;
     try {
       // Use sessionKey for routing to the agent's session
       // Format: {prefix}{openclaw_session_id} where prefix defaults to 'agent:main:'
-      const prefix = agent.session_key_prefix || 'agent:main:';
-      const sessionKey = `${prefix}${session.openclaw_session_id}`;
+      const sessionKey = buildOpenClawSessionKey(agent, session.openclaw_session_id);
       await client.call('chat.send', {
         sessionKey,
         message: finalMessage,

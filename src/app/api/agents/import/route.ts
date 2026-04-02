@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { queryOne, queryAll, run, transaction } from '@/lib/db';
 import { normalizeGatewayModel } from '@/lib/openclaw/gateway-compat';
+import { getDefaultSessionKeyPrefix } from '@/lib/openclaw/session-routing';
 import type { Agent } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest) {
         const id = uuidv4();
         const workspaceId = sanitizeText(agentReq.workspace_id) || 'default';
         const model = normalizeGatewayModel(agentReq.model) || null;
+        const sessionKeyPrefix = getDefaultSessionKeyPrefix({ gateway_agent_id: gatewayAgentId });
 
         // Generate default identity files referencing the gateway agent.
         // The gateway does not expose SOUL.md/USER.md/AGENTS.md via its API,
@@ -114,8 +116,8 @@ export async function POST(request: NextRequest) {
         ].join('\n');
 
         run(
-          `INSERT INTO agents (id, name, role, description, avatar_emoji, is_master, workspace_id, soul_md, user_md, agents_md, model, source, gateway_agent_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO agents (id, name, role, description, avatar_emoji, is_master, workspace_id, soul_md, user_md, agents_md, model, source, gateway_agent_id, session_key_prefix, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             name,
@@ -130,6 +132,7 @@ export async function POST(request: NextRequest) {
             model,
             'gateway',
             gatewayAgentId,
+            sessionKeyPrefix,
             now,
             now,
           ]
