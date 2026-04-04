@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const task = queryOne<Task>('SELECT * FROM tasks WHERE id = ?', [id]);
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 });
 
-    const status = getWorkspaceStatus(task);
+    const status = await getWorkspaceStatus(task);
     return NextResponse.json(status);
   } catch (error) {
     console.error('Failed to get workspace status:', error);

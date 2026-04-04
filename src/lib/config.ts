@@ -25,9 +25,26 @@ export interface MissionControlConfig {
   kanbanCompactEmptyColumns: boolean; // shrink empty columns to fit header text
 }
 
+function getPreferredWorkspaceBasePathDefault(): string {
+  if (typeof window === 'undefined') {
+    const home = process.env.HOME;
+    const cwd = process.cwd();
+    const openClawRoot = home ? `${home}/.openclaw` : null;
+    if ((process.env.OPENCLAW_HOME && process.env.OPENCLAW_HOME.trim()) || (openClawRoot && cwd.startsWith(openClawRoot))) {
+      return process.env.OPENCLAW_HOME || '~/.openclaw';
+    }
+  }
+
+  return '~/.openclaw';
+}
+
+function getPreferredProjectsPathDefault(): string {
+  return `${getPreferredWorkspaceBasePathDefault()}/projects`;
+}
+
 const DEFAULT_CONFIG: MissionControlConfig = {
-  workspaceBasePath: '~/Documents/Shared',
-  projectsPath: '~/Documents/Shared/projects',
+  workspaceBasePath: getPreferredWorkspaceBasePathDefault(),
+  projectsPath: getPreferredProjectsPathDefault(),
   missionControlUrl: typeof window !== 'undefined' ? window.location.origin : `http://localhost:${process.env.PORT || '4000'}`,
   defaultProjectName: 'mission-control',
   kanbanCompactEmptyColumns: false,
@@ -140,7 +157,7 @@ export function getWorkspaceBasePath(): string {
   }
 
   // Server-side: check env var first, then default
-  return process.env.WORKSPACE_BASE_PATH || '~/Documents/Shared';
+  return process.env.WORKSPACE_BASE_PATH || getPreferredWorkspaceBasePathDefault();
 }
 
 /**
@@ -153,7 +170,7 @@ export function getProjectsPath(): string {
   }
 
   // Server-side: check env var first, then default
-  return process.env.PROJECTS_PATH || '~/Documents/Shared/projects';
+  return process.env.PROJECTS_PATH || getPreferredProjectsPathDefault();
 }
 
 /**

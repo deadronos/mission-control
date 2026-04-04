@@ -45,11 +45,11 @@ export interface RestoreResult {
 // ---------------------------------------------------------------------------
 
 function getDbPath(): string {
-  return process.env.DATABASE_PATH || path.join(process.cwd(), 'mission-control.db');
+  return process.env.DATABASE_PATH || path.join(/* turbopackIgnore: true */ process.cwd(), 'mission-control.db');
 }
 
 function getBackupDir(): string {
-  return path.join(process.cwd(), 'backups');
+  return path.join(/* turbopackIgnore: true */ process.cwd(), 'backups');
 }
 
 function ensureBackupDir(): string {
