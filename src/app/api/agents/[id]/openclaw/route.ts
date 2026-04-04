@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { queryOne, run } from '@/lib/db';
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ linked: true, session });
   } catch (error) {
-    console.error('Failed to get OpenClaw session:', error);
+    logger.error('Failed to get OpenClaw session:', error);
     return NextResponse.json(
       { error: 'Failed to get OpenClaw session' },
       { status: 500 }
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     try {
       await client.listSessions();
     } catch (err) {
-      console.error('Failed to verify OpenClaw connection:', err);
+      logger.error('Failed to verify OpenClaw connection:', err);
       return NextResponse.json(
         { error: 'Connected but failed to communicate with OpenClaw Gateway' },
         { status: 503 }
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ linked: true, session }, { status: 201 });
   } catch (error) {
-    console.error('Failed to link agent to OpenClaw:', error);
+    logger.error('Failed to link agent to OpenClaw:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -158,7 +159,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({ linked: false, success: true });
   } catch (error) {
-    console.error('Failed to unlink agent from OpenClaw:', error);
+    logger.error('Failed to unlink agent from OpenClaw:', error);
     return NextResponse.json(
       { error: 'Failed to unlink agent from OpenClaw' },
       { status: 500 }

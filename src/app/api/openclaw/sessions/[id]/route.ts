@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 import { getOpenClawClient } from '@/lib/openclaw/client';
 import { getDb } from '@/lib/db';
@@ -41,7 +42,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ session });
   } catch (error) {
-    console.error('Failed to get OpenClaw session:', error);
+    logger.error('Failed to get OpenClaw session:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -82,7 +83,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to send message to OpenClaw session:', error);
+    logger.error('Failed to send message to OpenClaw session:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -100,7 +101,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const db = getDb();
 
     // Find session by openclaw_session_id
-    const session = db.prepare('SELECT * FROM openclaw_sessions WHERE openclaw_session_id = ?').get(id) as any;
+    const session = db.prepare('SELECT * FROM openclaw_sessions WHERE openclaw_session_id = ?').get(id) as { id: string, agent_id?: string, task_id?: string } | undefined;
 
     if (!session) {
       return NextResponse.json(
@@ -153,7 +154,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     return NextResponse.json(updatedSession);
   } catch (error) {
-    console.error('Failed to update OpenClaw session:', error);
+    logger.error('Failed to update OpenClaw session:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -168,7 +169,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const db = getDb();
 
     // Find session by openclaw_session_id or internal id
-    let session = db.prepare('SELECT * FROM openclaw_sessions WHERE openclaw_session_id = ?').get(id) as any;
+    let session = db.prepare('SELECT * FROM openclaw_sessions WHERE openclaw_session_id = ?').get(id) as { id: string, agent_id?: string, task_id?: string } | undefined;
 
     if (!session) {
       session = db.prepare('SELECT * FROM openclaw_sessions WHERE id = ?').get(id) as any;
@@ -210,7 +211,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, deleted: session.id });
   } catch (error) {
-    console.error('Failed to delete OpenClaw session:', error);
+    logger.error('Failed to delete OpenClaw session:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

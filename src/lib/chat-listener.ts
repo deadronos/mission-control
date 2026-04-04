@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Chat Listener — captures agent responses to user chat messages.
  *
@@ -85,13 +86,13 @@ export function attachChatListener(): void {
     pendingReplies.delete(payload.sessionKey);
 
     try {
-      console.log(`[ChatListener] Agent replied for task ${pending.taskId}: ${content.slice(0, 100)}...`);
+      logger.info(`[ChatListener] Agent replied for task ${pending.taskId}: ${content.slice(0, 100)}...`);
       const note = createNote(pending.taskId, content.trim(), 'direct', 'assistant');
       broadcast({ type: 'note_delivered', payload: { taskId: pending.taskId, noteId: note.id } });
     } catch (err) {
-      console.error('[ChatListener] Failed to store agent response:', err);
+      logger.error('[ChatListener] Failed to store agent response:', err);
     }
   });
 
-  console.log('[ChatListener] Attached to OpenClaw client');
+  logger.info('[ChatListener] Attached to OpenClaw client');
 }

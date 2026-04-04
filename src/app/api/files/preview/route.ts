@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * File Preview API
  * Serves local files for preview (HTML only for security)
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('[FILE] Error reading file:', error);
+    logger.error('[FILE] Error reading file:', error);
     return NextResponse.json({ error: 'Failed to read file' }, { status: 500 });
   }
 }

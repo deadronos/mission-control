@@ -1,5 +1,7 @@
 'use client';
 
+
+import { logger } from '@/lib/logger';
 import { useState, useEffect } from 'react';
 import { Plus, Rocket, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
@@ -43,7 +45,7 @@ export default function AutopilotPage() {
           } catch { /* skip */ }
         }
       } catch (error) {
-        console.error('Failed to load products:', error);
+        logger.error('Failed to load products:', error);
       } finally {
         setLoading(false);
       }

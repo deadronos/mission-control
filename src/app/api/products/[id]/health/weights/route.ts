@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { updateWeights } from '@/lib/autopilot/health-score';
 import { getProduct } from '@/lib/autopilot/products';
@@ -43,7 +44,7 @@ export async function PUT(
     const updated = updateWeights(id, body);
     return NextResponse.json(updated);
   } catch (error) {
-    console.error('[API] Update weights error:', error);
+    logger.error('[API] Update weights error:', error);
     return NextResponse.json(
       { error: 'Failed to update weights' },
       { status: 500 }

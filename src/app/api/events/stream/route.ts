@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Server-Sent Events (SSE) endpoint for real-time updates
  * Clients connect to this endpoint and receive live event broadcasts
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
             await runHealthCheckCycle();
           }
         } catch (error) {
-          console.error('[SSE] Health check cycle error:', error);
+          logger.error('[SSE] Health check cycle error:', error);
         }
       }, 120000);
 

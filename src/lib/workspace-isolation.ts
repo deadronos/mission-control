@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Parallel Build Isolation
  *
@@ -456,7 +457,7 @@ async function mergeWorktree(
       pushed = true;
     } catch (err) {
       // May not have remote push access
-      console.warn(`[Workspace] Push failed for ${branch}:`, (err as Error).message);
+      logger.warn(`[Workspace] Push failed for ${branch}:`, (err as Error).message);
     }
 
     // Create PR if pushed and requested (or if repo_url suggests GitHub)
@@ -473,7 +474,7 @@ async function mergeWorktree(
           prUrl = result.split('\n').pop()?.trim();
         }
       } catch (err) {
-        console.warn('[Workspace] PR creation failed:', (err as Error).message);
+        logger.warn('[Workspace] PR creation failed:', (err as Error).message);
       }
     }
 
@@ -624,7 +625,7 @@ export function cleanupWorkspace(task: Task): boolean {
 
     return true;
   } catch (err) {
-    console.error(`[Workspace] Cleanup failed for task ${task.id}:`, err);
+    logger.error(`[Workspace] Cleanup failed for task ${task.id}:`, err);
     return false;
   }
 }
@@ -711,7 +712,7 @@ export async function triggerWorkspaceMerge(taskId: string): Promise<MergeResult
     if (queued) {
       // Fire-and-forget the next merge
       triggerWorkspaceMerge(queued.id).catch(err =>
-        console.error('[Workspace] Queued merge failed:', err)
+        logger.error('[Workspace] Queued merge failed:', err)
       );
     }
   }

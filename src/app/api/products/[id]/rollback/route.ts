@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * POST /api/products/[id]/rollback — Manual rollback trigger
  * Body: { pr_url: string, commit_sha: string, reason?: string, task_id?: string }
@@ -48,7 +49,7 @@ export async function GET(
       currentTier: getProductSettings(product).automation_tier || null,
     });
   } catch (err) {
-    console.error('[API] Failed to list product rollbacks:', err);
+    logger.error('[API] Failed to list product rollbacks:', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to list rollbacks' },
       { status: 500 }
@@ -100,7 +101,7 @@ export async function POST(
       revertSuccess: result.success,
     }, { status: 201 });
   } catch (err) {
-    console.error('[API] Failed to trigger rollback:', err);
+    logger.error('[API] Failed to trigger rollback:', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to trigger rollback' },
       { status: 500 }
@@ -147,7 +148,7 @@ export async function PATCH(
       restoredTier: restore_tier || null,
     });
   } catch (err) {
-    console.error('[API] Failed to acknowledge rollback:', err);
+    logger.error('[API] Failed to acknowledge rollback:', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to acknowledge rollback' },
       { status: 500 }

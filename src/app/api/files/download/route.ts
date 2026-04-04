@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * File Download API
  * Returns file content over HTTP from the server filesystem.
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
     // Read file
     const content = readFileSync(targetPath, isText ? 'utf-8' : undefined);
 
-    console.log(`[FILE DOWNLOAD] Read: ${targetPath} (${stats.size} bytes)`);
+    logger.info(`[FILE DOWNLOAD] Read: ${targetPath} (${stats.size} bytes)`);
 
     // Return raw content or JSON wrapper
     if (raw) {
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
       modifiedAt: stats.mtime.toISOString(),
     });
   } catch (error) {
-    console.error('Error downloading file:', error);
+    logger.error('Error downloading file:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

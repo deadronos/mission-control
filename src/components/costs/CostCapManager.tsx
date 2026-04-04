@@ -1,5 +1,7 @@
 'use client';
 
+
+import { logger } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import type { CostCap } from '@/lib/types';
@@ -22,7 +24,7 @@ export function CostCapManager({ workspaceId, productId }: CostCapManagerProps) 
       const res = await fetch(`/api/costs/caps?${params}`);
       if (res.ok) setCaps(await res.json());
     } catch (error) {
-      console.error('Failed to load caps:', error);
+      logger.error('Failed to load caps:', error);
     } finally {
       setLoading(false);
     }
@@ -40,7 +42,7 @@ export function CostCapManager({ workspaceId, productId }: CostCapManagerProps) 
       setShowCreate(false);
       loadCaps();
     } catch (error) {
-      console.error('Failed to create cap:', error);
+      logger.error('Failed to create cap:', error);
     }
   };
 
@@ -49,7 +51,7 @@ export function CostCapManager({ workspaceId, productId }: CostCapManagerProps) 
       await fetch(`/api/costs/caps/${id}`, { method: 'DELETE' });
       loadCaps();
     } catch (error) {
-      console.error('Failed to delete cap:', error);
+      logger.error('Failed to delete cap:', error);
     }
   };
 

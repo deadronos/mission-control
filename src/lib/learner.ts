@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Learner Module
  *
@@ -114,11 +115,11 @@ Focus on:
         message: learningMessage,
         idempotencyKey: `learner-${taskId}-${event.newStatus}-${Date.now()}`
       });
-      console.log(`[Learner] Notified ${learnerRole.agent_name} about ${event.previousStatus}→${event.newStatus}`);
+      logger.info(`[Learner] Notified ${learnerRole.agent_name} about ${event.previousStatus}→${event.newStatus}`);
     }
   } catch (err) {
     // Learner notification is best-effort — don't fail the transition
-    console.error('[Learner] Failed to notify learner:', (err as Error).message);
+    logger.error('[Learner] Failed to notify learner:', (err as Error).message);
   }
 }
 

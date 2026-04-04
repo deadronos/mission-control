@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getHealthResponse } from '@/lib/autopilot/health-score';
 import { getProduct } from '@/lib/autopilot/products';
@@ -20,7 +21,7 @@ export async function GET(
     const response = getHealthResponse(id);
     return NextResponse.json(response);
   } catch (error) {
-    console.error('[API] Health score error:', error);
+    logger.error('[API] Health score error:', error);
     return NextResponse.json(
       { error: 'Failed to compute health score' },
       { status: 500 }

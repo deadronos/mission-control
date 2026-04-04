@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * File Upload API
  * Accepts file content over HTTP and saves it to the server filesystem.
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest) {
     // Write the file
     writeFileSync(fullPath, content, { encoding });
 
-    console.log(`[FILE UPLOAD] Created: ${fullPath}`);
+    logger.info(`[FILE UPLOAD] Created: ${fullPath}`);
 
     return NextResponse.json({
       success: true,
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest) {
       size: Buffer.byteLength(content, encoding),
     }, { status: 201 });
   } catch (error) {
-    console.error('Error uploading file:', error);
+    logger.error('Error uploading file:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

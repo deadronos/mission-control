@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, queryOne, queryAll, run } from '@/lib/db';
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     // Keep canonical agent catalog synced before every dispatch (best-effort)
     await syncGatewayAgentsToCatalog({ reason: 'dispatch' }).catch(err => {
-      console.warn('[Dispatch] agent catalog sync failed:', err);
+      logger.warn('[Dispatch] agent catalog sync failed:', err);
     });
 
     // Get task with agent info
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       try {
         await client.connect();
       } catch (err) {
-        console.error('Failed to connect to OpenClaw Gateway:', err);
+        logger.error('Failed to connect to OpenClaw Gateway:', err);
         client.forceReconnect();
         return NextResponse.json(
           { error: 'Failed to connect to OpenClaw Gateway' },
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         );
         if (monthlySpend && monthlySpend.total >= product.cost_cap_monthly) {
           costCapWarning = `Monthly cost cap reached: $${monthlySpend.total.toFixed(2)}/$${product.cost_cap_monthly.toFixed(2)}`;
-          console.warn(`[Dispatch] ${costCapWarning} for product ${product.name}`);
+          logger.warn(`[Dispatch] ${costCapWarning} for product ${product.name}`);
         }
       }
     }
@@ -193,9 +194,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         workspaceIsolated = Boolean(isolationStrategy);
         workspaceBranchName = workspace.branch;
         workspacePort = workspace.port;
-        console.log(`[Dispatch] Created ${workspace.strategy} workspace for task ${task.id}: ${workspace.path}`);
+        logger.info(`[Dispatch] Created ${workspace.strategy} workspace for task ${task.id}: ${workspace.path}`);
       } catch (err) {
-        console.warn(`[Dispatch] Workspace isolation failed, using default path:`, (err as Error).message);
+        logger.warn(`[Dispatch] Workspace isolation failed, using default path:`, (err as Error).message);
       }
     }
 
@@ -477,7 +478,7 @@ If you need help or clarification, ask the orchestrator.`;
         ...(costCapWarning ? { cost_cap_warning: costCapWarning } : {}),
       });
     } catch (err) {
-      console.error('Failed to send message to agent:', err);
+      logger.error('Failed to send message to agent:', err);
       // Force-reconnect so the next dispatch attempt gets a fresh WebSocket
       const client2 = getOpenClawClient();
       client2.forceReconnect();
@@ -496,7 +497,7 @@ If you need help or clarification, ask the orchestrator.`;
       );
     }
   } catch (error) {
-    console.error('Failed to dispatch task:', error);
+    logger.error('Failed to dispatch task:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

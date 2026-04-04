@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Task Deliverables API
  * Endpoints for managing task deliverables (files, URLs, artifacts)
@@ -32,7 +33,7 @@ export async function GET(
 
     return NextResponse.json(deliverables);
   } catch (error) {
-    console.error('Error fetching deliverables:', error);
+    logger.error('Error fetching deliverables:', error);
     return NextResponse.json(
       { error: 'Failed to fetch deliverables' },
       { status: 500 }
@@ -99,7 +100,7 @@ export async function POST(
 
     return NextResponse.json(deliverable, { status: 201 });
   } catch (error) {
-    console.error('Error creating deliverable:', error);
+    logger.error('Error creating deliverable:', error);
     return NextResponse.json(
       { error: 'Failed to create deliverable' },
       { status: 500 }

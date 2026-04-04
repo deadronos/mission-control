@@ -1,5 +1,7 @@
 'use client';
 
+
+import { logger } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { IdeaCard } from './IdeaCard';
@@ -18,7 +20,7 @@ export function MaybePool({ productId }: MaybePoolProps) {
       const res = await fetch(`/api/products/${productId}/maybe`);
       if (res.ok) setEntries(await res.json());
     } catch (error) {
-      console.error('Failed to load maybe pool:', error);
+      logger.error('Failed to load maybe pool:', error);
     } finally {
       setLoading(false);
     }
@@ -31,7 +33,7 @@ export function MaybePool({ productId }: MaybePoolProps) {
       await fetch(`/api/products/${productId}/maybe/${ideaId}/resurface`, { method: 'POST' });
       loadPool();
     } catch (error) {
-      console.error('Failed to resurface idea:', error);
+      logger.error('Failed to resurface idea:', error);
     }
   };
 
@@ -40,7 +42,7 @@ export function MaybePool({ productId }: MaybePoolProps) {
       await fetch(`/api/products/${productId}/maybe/evaluate`, { method: 'POST' });
       loadPool();
     } catch (error) {
-      console.error('Failed to evaluate pool:', error);
+      logger.error('Failed to evaluate pool:', error);
     }
   };
 

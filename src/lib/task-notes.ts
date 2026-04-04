@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { queryOne, queryAll, run } from '@/lib/db';
 import { broadcast } from '@/lib/events';
@@ -89,7 +90,7 @@ export async function deliverPendingNotesAtCheckpoint(taskId: string): Promise<n
   }
 
   if (!activeSession) {
-    console.warn(`[TaskNotes] No active session for task ${taskId} — notes remain pending`);
+    logger.warn(`[TaskNotes] No active session for task ${taskId} — notes remain pending`);
     return 0;
   }
 
@@ -114,7 +115,7 @@ export async function deliverPendingNotesAtCheckpoint(taskId: string): Promise<n
     markNotesDelivered(notes.map(n => n.id));
     return notes.length;
   } catch (error) {
-    console.error(`[TaskNotes] Failed to deliver notes for task ${taskId}:`, error);
+    logger.error(`[TaskNotes] Failed to deliver notes for task ${taskId}:`, error);
     return 0;
   }
 }

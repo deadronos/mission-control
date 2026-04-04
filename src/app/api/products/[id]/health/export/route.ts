@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { getScoreHistory, computeHealthScore, getWeights } from '@/lib/autopilot/health-score';
 import { getProduct } from '@/lib/autopilot/products';
@@ -59,7 +60,7 @@ export async function GET(
       history,
     });
   } catch (error) {
-    console.error('[API] Health export error:', error);
+    logger.error('[API] Health export error:', error);
     return NextResponse.json(
       { error: 'Failed to export health data' },
       { status: 500 }
