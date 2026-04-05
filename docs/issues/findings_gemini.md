@@ -1,138 +1,38 @@
-# Codebase Findings (Gemini Analysis)
+ Based on my review of the codebase and project structure, here are the possible problems and areas of concern:
 
-_Read-only scan completed on 2026-04-04._
+  1. Real-time Synchronization & SSE Scalability
+   * Memory Leaks in SSE: The src/lib/events.ts file uses a Set<ReadableStreamDefaultController> to store active SSE connections. While there is a removeClient function, if clients disconnect
+     unexpectedly without triggering the close or error events properly (common in some browser/proxy scenarios), the set could grow indefinitely, leading to memory leaks.
+   * Polling vs. SSE: The GET /api/events endpoint in src/app/api/events/route.ts implements a polling-based approach (using a since parameter), while src/lib/events.ts suggests an SSE-based
+     broadcast system. This duality might lead to inconsistent state updates if the frontend uses both or if they aren't perfectly synchronized.
 
-This document captures issue-ready findings from a programmatic and architectural scan of the repository. Each finding is intended to be actionable for later triage or issue creation.
+  2. Agent Communication & WebSocket Reliability
+   * OpenClaw Gateway Dependency: The system is heavily dependent on a WebSocket connection to the OpenClaw Gateway. The OpenClawClient in src/lib/openclaw/client.ts manages a complex deduplication
+     cache (globalProcessedEvents) using globalThis. If this cache isn't cleared effectively across all instances or if the TTL is too long, it could consume significant memory in long-running
+     processes.
+   * Deduplication Collisions: The generateEventId function uses a combination of event type, sequence ID, and a hash of the payload. While robust, any bug in this hashing logic could lead to events
+     being incorrectly ignored, causing agents to miss critical updates.
 
-## Summary
+  3. Database & Persistence
+   * SQLite for High Concurrency: The project uses SQLite with WAL mode (journal_mode = WAL). While SQLite is robust, the "Convoy Mode" executes 3–5 agents in parallel, and the "Autonomous Research"
+     loop runs continuously. High write concurrency from multiple agents and background research tasks could lead to SQLITE_BUSY errors or database locking issues under heavy load.
+   * Schema Migration Complexity: With over 20 migrations and a schema nearing 1,000 lines, manual schema management becomes error-prone. There is a risk of the schema.ts file falling out of sync
+     with the actual migrations, potentially causing fresh installations to differ from migrated ones.
 
-| Priority | Area | Candidate issue |
-| --- | --- | --- |
-| High | Reliability / Types | Fix TypeScript compilation errors in `completion-routing.test.ts` |
-| Medium | UI Reliability | Resolve missing React hook dependencies across multiple components |
-| Medium | Code Quality | Reduce usage of `any` types across the codebase |
-| Low | Observability | Replace `console.log` statements with a structured logging library |
-| Low | Performance | Use Next.js `<Image />` instead of standard `<img>` tags |
+  4. Workspace Isolation
+   * Port Collision Risks: Parallel build isolation depends on a workspace_ports table to manage port allocation (range 4200–4299). If an agent crashes without releasing its port, that port remains
+     locked until manually cleared, potentially exhausting the port pool if many crashes occur.
+   * Git Worktree Cleanup: The use of Git worktrees for isolation is powerful but requires rigorous cleanup. If the workspace-isolation.ts logic fails to remove worktrees after task completion (due
+     to process crashes or filesystem locks), it could lead to significant disk space usage and cluttered repositories.
 
-## Findings
+  5. Architecture & State Management
+   * Next.js "force-dynamic" Overhead: Many API routes are marked as force-dynamic. While necessary for real-time data, this prevents Next.js from leveraging any caching layers, placing the entire
+     load directly on the SQLite database for every request.
+   * Branding Inconsistency: The project is in the middle of a branding shift from "Mission Control" to "Autensa." This is visible in the mix of "MC" prefixed variables/CSS classes and "Autensa"
+     references in documentation, which can lead to confusion for new contributors.
 
-## 1. Fix TypeScript compilation errors in `completion-routing.test.ts`
-
-**Priority:** High  
-**Area:** Reliability / Types
-
-### Problem
-Running `npx tsc --noEmit` reveals two TypeScript errors in `src/lib/openclaw/completion-routing.test.ts`. An invalid property `id` is specified instead of `task_id` or `agent_id`, and `null` is assigned to a property expecting `string | undefined`.
-
-### Evidence
-- `src/lib/openclaw/completion-routing.test.ts:53:5` - `Object literal may only specify known properties, and 'id' does not exist...`
-- `src/lib/openclaw/completion-routing.test.ts:79:5` - `Type 'null' is not assignable to type 'string | undefined'.`
-
-### Impact
-- The build pipeline or CI checks will fail if strictly enforcing TypeScript compilation.
-- Potential logic errors or false positives in the completion routing tests due to invalid object shapes.
-
-### Suggested fix
-- Update the mock object in line 53 to use `task_id` or `agent_id` instead of `id`.
-- Update the assignment in line 79 to use `undefined` instead of `null`.
-
-### Acceptance criteria
-- `npx tsc --noEmit` runs with 0 errors across the codebase.
-
-## 2. Resolve missing React hook dependencies across multiple components
-
-**Priority:** Medium  
-**Area:** UI Reliability
-
-### Problem
-Running `npm run lint` reveals multiple warnings from the `react-hooks/exhaustive-deps` rule. Several components have `useEffect` or `useCallback` hooks missing variables used inside them.
-
-### Evidence
-- `src/components/PlanningTab.tsx` (line 196: missing `isWaitingForResponse`)
-- `src/components/WorkspaceTab.tsx` (line 45: missing `loadStatus`)
-- `src/components/autopilot/HealthBadge.tsx` (line 36: missing `animatedScore`)
-- `src/components/autopilot/MaybePool.tsx` (line 27: missing `loadPool`)
-- `src/components/autopilot/SwipeDeck.tsx` (line 50: missing `loadDeck`)
-- `src/components/costs/CostCapManager.tsx` (line 31: missing `loadCaps`)
-
-### Impact
-- Stale closures where hooks reference old state or props.
-- Missed updates or infinite loops if dependencies change but hooks are not re-triggered.
-
-### Suggested fix
-- Review each hook and either include the missing dependency in the array or refactor the hook to remove the dependency safely.
-
-### Acceptance criteria
-- `npm run lint` yields 0 warnings related to `exhaustive-deps`.
-
-## 3. Reduce usage of `any` types across the codebase
-
-**Priority:** Medium  
-**Area:** Code Quality
-
-### Problem
-A scan of the `src` directory reveals over 60 instances of the `any` type. This is particularly prevalent in database queries (e.g., `as any`, `as any[]`), routing payload casting, and test mocks.
-
-### Evidence
-- `src/lib/autopilot/similarity.test.ts`
-- `src/app/api/tasks/[id]/planning/poll/route.ts`
-- `src/app/api/openclaw/sessions/[id]/route.ts`
-- `src/lib/workflow-engine.ts`
-
-### Impact
-- Undermines TypeScript's type safety, bypassing compile-time checks.
-- Increases the risk of runtime errors due to unexpected data shapes from database rows or API requests.
-
-### Suggested fix
-- Replace `any` casts in database responses with proper Zod validation schemas or specific interfaces.
-- Use `unknown` where the type is truly dynamic and implement type guards.
-
-### Acceptance criteria
-- A strict linting rule is added for `no-explicit-any` (or similar).
-- The number of `any` type usages is significantly reduced or fully eliminated.
-
-## 4. Replace `console.log` statements with a structured logging library
-
-**Priority:** Low  
-**Area:** Observability
-
-### Problem
-There are over 100 uses of `console.log` throughout library files (e.g., `lib/workflow-engine.ts`, `lib/backup.ts`) and API routes.
-
-### Evidence
-- `src/lib/workflow-engine.ts`
-- `src/lib/backup.ts`
-- `src/lib/autopilot/recovery.ts`
-
-### Impact
-- Logs in production may be unstructured, difficult to parse, and noisy.
-- No ability to easily filter logs by severity level (info, warn, error, debug).
-
-### Suggested fix
-- Introduce a structured logging library such as `pino` or `winston`.
-- Replace `console.log` with appropriate log levels (e.g., `logger.info`, `logger.debug`).
-
-### Acceptance criteria
-- All programmatic usage of `console.log` in backend logic and API routes is replaced with a dedicated logging instance.
-
-## 5. Use Next.js `<Image />` instead of standard `<img>` tags
-
-**Priority:** Low  
-**Area:** Performance
-
-### Problem
-`src/components/TaskImages.tsx` uses standard HTML `<img>` tags instead of the Next.js `<Image />` component.
-
-### Evidence
-- `src/components/TaskImages.tsx:110` (ESLint warning: `@next/next/no-img-element`)
-
-### Impact
-- Unoptimized images can result in slower Largest Contentful Paint (LCP) and higher bandwidth usage.
-
-### Suggested fix
-- Import `Image` from `next/image` and replace the `<img>` tags.
-- Configure `next.config.mjs` with the allowed remote domains if the images are hosted externally.
-
-### Acceptance criteria
-- `npm run lint` yields 0 warnings for `@next/next/no-img-element`.
-- Images load responsively and use appropriate modern formats.
+  6. Error Handling & Resilience
+   * Cascading Failures in Convoys: In Convoy Mode, subtasks can have dependencies. If a parent task or a critical subtask fails, the cleanup and "auto-nudge" logic must be perfect to prevent
+     "zombie" agents from continuing work on a doomed feature.
+   * Retry Loop Exhaustion: The ideation and research cycles have retry_count fields. If the underlying AI provider (Anthropic/OpenAI) has sustained outages, the system might enter a heavy retry loop
+     that consumes resources and produces excessive error logging.
