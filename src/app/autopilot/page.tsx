@@ -146,13 +146,16 @@ export default function AutopilotPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {healthScores[product.id] !== undefined && (
-                      <Link
-                        href={`/autopilot/${product.id}/health`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="hover:scale-110 transition-transform"
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          window.location.href = `/autopilot/${product.id}/health`;
+                        }}
+                        className="hover:scale-110 transition-transform cursor-pointer"
                       >
                         <HealthBadge score={healthScores[product.id]} size={38} />
-                      </Link>
+                      </button>
                     )}
                     <ArrowRight className="w-4 h-4 text-mc-text-secondary group-hover:text-mc-accent transition-colors" />
                   </div>
