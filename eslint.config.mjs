@@ -6,10 +6,9 @@ const config = [
   ...nextTypeScript,
   {
     rules: {
-      '@typescript-eslint/no-unused-vars': 'off',
-      '@typescript-eslint/no-explicit-any': 'off',
-      'react-hooks/purity': 'off',
-      'react-hooks/set-state-in-effect': 'off',
+      // Allow warn level for these for now to ease migration
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
   {

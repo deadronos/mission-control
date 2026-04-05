@@ -5,15 +5,40 @@ import { logger } from '@/lib/logger';
  */
 
 import type { SSEEvent } from './types';
+import { runHealthCheckCycle } from '@/lib/agent-health';
+import { SSE_HEALTH_CHECK_INTERVAL_MS } from '@/lib/constants';
 
 // Store active SSE client connections
 const clients = new Set<ReadableStreamDefaultController>();
+
+// Singleton health check - runs every interval regardless of connection count
+let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+let healthCheckStarted = false;
+
+function startHealthCheckCycle(): void {
+  if (healthCheckStarted) return;
+  healthCheckStarted = true;
+
+  healthCheckInterval = setInterval(async () => {
+    if (clients.size > 0) {
+      try {
+        await runHealthCheckCycle();
+      } catch (error) {
+        logger.error('[SSE] Health check cycle error:', error);
+      }
+    }
+  }, SSE_HEALTH_CHECK_INTERVAL_MS);
+
+  logger.info('[SSE] Health check cycle started');
+}
 
 /**
  * Register a new SSE client connection
  */
 export function registerClient(controller: ReadableStreamDefaultController): void {
   clients.add(controller);
+  // Start health check on first connection
+  startHealthCheckCycle();
 }
 
 /**

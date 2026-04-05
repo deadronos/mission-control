@@ -7,356 +7,192 @@
 
 ## Executive Summary
 
-| Category | Count | Severity |
-|----------|-------|----------|
-| Security Issues | 4 | Critical |
-| Bugs | 9 | High |
-| Architecture Issues | 6 | Medium |
-| Performance Issues | 3 | Medium |
-| Code Smells | 4 | Low |
-| Best Practices | 6 | Medium |
-| Type Safety | 3 | Medium |
+| Category | Count | Fixed | Remaining |
+|----------|-------|-------|-----------|
+| Security Issues | 4 | 0 | 4 |
+| Bugs | 9 | 6 | 3 |
+| Architecture Issues | 6 | 0 | 6 |
+| Performance Issues | 3 | 1 | 2 |
+| Code Smells | 4 | 2 | 2 |
+| Best Practices | 6 | 0 | 6 |
+| Type Safety | 3 | 2 | 1 |
+
+**FIXED ISSUES:**
+- ✅ SSE Reconnect Race Condition (useSSE.ts)
+- ✅ Memory Leak in Chat Listener (chat-listener.ts)
+- ✅ SwipeDeck API Error Handling (SwipeDeck.tsx)
+- ✅ TaskModal window.location.reload (TaskModal.tsx)
+- ✅ JSON.parse Error Handling (dispatch/route.ts)
+- ✅ SSE Health Check Per-Connection (events.ts, stream/route.ts)
+- ✅ ESLint Configuration (re-enabled warnings)
+- ✅ Zustand Store Selector Usage (TaskModal.tsx)
+- ✅ React Error Boundary (ErrorBoundary.tsx)
+- ✅ Magic Numbers Extracted to Constants (constants.ts)
+- ✅ API Error Response Types (types.ts)
+- ✅ SSEEvent Type Safety (types.ts)
 
 ---
 
-## Critical Security Issues
+## Critical Security Issues (NOT FIXED - Require Design Decisions)
 
 ### 1. Sensitive Credentials in .env.local Exposed
 **File:** `.env.local`
 
-The `.env.local` file contains hardcoded credentials:
-- `OPENCLAW_GATEWAY_TOKEN=fbc3c7528aa4393ac9abb824ff63b472a184a7ea811ecd8f`
-- `MC_API_TOKEN=HorseBatteryCorrectStaple`
-- `WEBHOOK_SECRET=HorsteBatteryCorrectStaple`
-
-While `.env.local` is gitignored, these credentials should be rotated immediately if they were ever committed.
+The `.env.local` file contains hardcoded credentials. User indicated this is not important since gitignored.
 
 ### 2. No API Authentication Middleware
 **Files:** `src/app/api/**/*.ts`
 
-Despite the `MC_API_TOKEN` environment variable existing, most API routes do not validate it. For example, in `src/app/api/products/[id]/route.ts`, the `GET`, `PATCH`, and `DELETE` handlers have no authentication checks.
+Despite the `MC_API_TOKEN` environment variable existing, most API routes do not validate it.
 
 ### 3. SQL Injection via String Interpolation
 **File:** `src/lib/workspace-isolation.ts` (lines 178-180)
-
-```typescript
-function markInterrupted(
-  table: string,  // <-- passed directly
-  cycleId: string,
-  ...
-): void {
-  run(
-    `UPDATE ${table} SET status = 'interrupted', ...`,  // <-- string interpolation
-    ...
-  );
-}
-```
 
 The `table` parameter is directly interpolated into SQL. While currently limited to `'research_cycles'` or `'ideation_cycles'`, this is a risky pattern.
 
 ### 4. Path Traversal Potential in File Access
 **Files:** `src/lib/server-file-access.ts`, `src/lib/workspace-isolation.ts`
 
-The `workspace-isolation.ts` uses `execSync` with shell commands constructed from task titles and paths (line 448-449):
-```typescript
-execSync(`git add -A && git diff --cached --quiet || git commit -m "Autopilot: final changes for ${task.title}"`, {
-```
-Task titles are not sanitized for shell metacharacters.
+Task titles are not sanitized for shell metacharacters in execSync calls.
 
 ---
 
-## Bugs
+## Bugs (MOSTLY FIXED)
 
-### 5. SSE Reconnect Race Condition
-**File:** `src/hooks/useSSE.ts` (lines 36-41)
+### 5. SSE Reconnect Race Condition ✅ FIXED
+**File:** `src/hooks/useSSE.ts`
 
-```typescript
-const connect = () => {
-  if (isConnecting || eventSourceRef.current?.readyState === EventSource.OPEN) {
-    return;
-  }
-  isConnecting = true;
-  // ...
-  eventSource.onerror = (error) => {
-    // ...
-    eventSource.close();
-    reconnectTimeoutRef.current = setTimeout(() => {
-      connect();
-    }, 5000);
-  };
-```
+Replaced `isConnecting` boolean flag with a `mounted` ref and local timeout variable to properly handle cleanup and prevent race conditions.
 
-The `isConnecting` flag is set to `true` before the connection opens but only reset to `false` in `onopen`. If `onerror` fires before `onopen`, `isConnecting` remains `true`, potentially preventing future connection attempts.
+### 6. Memory Leak: Uncleared Chat Listener Pending Replies ✅ FIXED
+**File:** `src/lib/chat-listener.ts`
 
-### 6. Memory Leak: Uncleared Chat Listener Pending Replies
-**File:** `src/lib/chat-listener.ts` (lines 37-44)
+Now tracks timeout ID and clears it when reply arrives before 5-minute expiration. Also extracted magic number to constant.
 
-```typescript
-export function expectReply(sessionKey: string, taskId: string): void {
-  pendingReplies.set(sessionKey, { taskId, sentAt: Date.now() });
-  setTimeout(() => {
-    const entry = pendingReplies.get(sessionKey);
-    if (entry && Date.now() - entry.sentAt >= 300000) {
-      pendingReplies.delete(sessionKey);
-    }
-  }, 300000);  // <-- Timer never cleared on normal completion
-}
-```
+### 7. SwipeDeck Doesn't Handle API Failures Gracefully ✅ FIXED
+**File:** `src/components/autopilot/SwipeDeck.tsx`
 
-When a reply arrives before the 5-minute timeout, the timeout callback is never cleared, wasting memory.
+Added error state and displays error UI with retry button when API call fails.
 
-### 7. SwipeDeck Doesn't Handle API Failures Gracefully
-**File:** `src/components/autopilot/SwipeDeck.tsx` (lines 34-47)
+### 8. TaskModal Uses window.location.reload ✅ FIXED
+**File:** `src/components/TaskModal.tsx`
 
-If `res.ok` is false, `loading` is set to `false` but no error state is shown to the user - they just see an empty deck.
+Replaced `window.location.reload()` with `router.refresh()` from Next.js navigation.
 
-### 8. TaskModal Uses window.location.reload
-**File:** `src/components/TaskModal.tsx` (lines 41-43)
+### 9. Unvalidated JSON.parse in Dispatch ✅ FIXED
+**File:** `src/app/api/tasks/[id]/dispatch/route.ts`
 
-```typescript
-const handleSpecLocked = useCallback(() => {
-  window.location.reload();
-}, []);
-```
+Now logs warnings when JSON.parse fails, making parse errors visible in logs.
 
-This loses any unsaved form state and is poor UX.
+### 10. SSE Health Check Runs Per-Connection ✅ FIXED
+**File:** `src/lib/events.ts`, `src/app/api/events/stream/route.ts`
 
-### 9. Unvalidated JSON.parse in Dispatch
-**File:** `src/app/api/tasks/[id]/dispatch/route.ts` (lines 208-217)
-
-```typescript
-if (rawTask.planning_spec) {
-  try {
-    const spec = JSON.parse(rawTask.planning_spec);
-    // planning_spec may be an object with spec_markdown, or a raw string
-    const specText = typeof spec === 'string' ? spec : (spec.spec_markdown || JSON.stringify(spec, null, 2));
-```
-
-If `planning_spec` contains malicious content, `JSON.parse` will throw but the error is silently caught.
-
-### 10. SSE Health Check Runs Per-Connection
-**File:** `src/app/api/events/stream/route.ts` (lines 41-49)
-
-Every SSE connection creates its own interval to run health checks. While the `getActiveConnectionCount() > 0` guard prevents duplicates, it's inefficient - one interval should run the health check regardless of connection count.
+Moved health check to singleton in events.ts that starts on first connection. Each connection no longer creates its own interval.
 
 ### 11. Inconsistent Error Response Formats
-Across API routes, error handling varies:
-- Some routes return `{ error: string }` with status codes
-- Some routes return generic messages like `{ error: 'Failed to fetch product' }`
-- Some routes return validation details, others don't
+**Helper Created:** `src/lib/api-response.ts`
+
+Created `errorResponse()` and `errorResponseWithDetails()` helpers. Routes should migrate to using these.
 
 ### 12. Stale Debug State in Zustand Store
 **File:** `src/lib/store.ts`
 
-The `debug.store()` calls throughout the store fire regardless of debug mode. However, the store is imported and executed on module load.
+Not critical enough to fix without more investigation.
 
 ---
 
-## Architecture & Design Issues
+## Architecture & Design Issues (NOT FIXED)
 
 ### 13. Singleton Database in Serverless Context
-**File:** `src/lib/db/index.ts` (lines 13-41)
-
-```typescript
-let db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH);
-    // ...
-  }
-  return db;
-}
-```
-
-SQLite with `better-sqlite3` is a singleton connection. In Next.js production deployment (which uses multiple Node.js workers), each worker has its own database connection, leading to inconsistent state.
-
 ### 14. Global SSE Client Set Memory Leak Risk
-**File:** `src/lib/events.ts` (lines 9-10)
-
-```typescript
-// Store active SSE client connections
-const clients = new Set<ReadableStreamDefaultController>();
-```
-
-This in-memory set grows with each connected client. If clients disconnect without calling `unregisterClient`, the set grows indefinitely.
-
 ### 15. Workspace Merge Lock Race Condition
-**File:** `src/lib/workspace-isolation.ts` (lines 678-688)
-
-```typescript
-const MERGE_LOCKS = new Map<string, boolean>();
-
-export function acquireMergeLock(productId: string): boolean {
-  if (MERGE_LOCKS.get(productId)) return false;
-  MERGE_LOCKS.set(productId, true);
-  return true;
-}
-```
-
-This in-memory lock is per-process. In a multi-worker deployment, different workers have different lock maps, potentially allowing concurrent merges.
-
 ### 16. No Request Timeout on External Fetch Calls
-**File:** `src/lib/autopilot/swipe.ts` (lines 359-368)
-
-While `swipe.ts` uses a timeout, many other `fetch` calls throughout the codebase don't set timeouts, risking hung requests.
-
 ### 17. Debug Module Exposes to Window
-**File:** `src/lib/debug.ts` (lines 57-61)
+### 18. ESLint Configuration Disables Important Checks ✅ FIXED
 
-```typescript
-if (typeof window !== 'undefined') {
-  (window as unknown as { mcDebug: { enable: () => void; disable: () => void } }).mcDebug = {
-    enable: enableDebug,
-    disable: disableDebug
-  };
-}
-```
-
-Exposing debug controls on `window.mcDebug` in production is unnecessary.
-
-### 18. ESLint Configuration Disables Important Checks
-**File:** `eslint.config.mjs`
-
-```javascript
-rules: {
-  '@typescript-eslint/no-unused-vars': 'off',
-  '@typescript-eslint/no-explicit-any': 'off',
-  'react-hooks/purity': 'off',
-  'react-hooks/set-state-in-effect': 'off',
-}
-```
-
-Disabling these rules allows significant code quality issues to proliferate.
+Re-enabled `no-unused-vars` and `no-explicit-any` at warn level.
 
 ---
 
 ## Performance Issues
 
-### 19. Zustand Store Updates Without Selectors
-**File:** `src/lib/store.ts`
-
-Components that use `useMissionControl()` without selectors will re-render on any state change. For example, `TaskModal` does:
-```typescript
-const { agents, addTask, updateTask, addEvent } = useMissionControl();
-```
-This subscribes to the entire store.
-
-### 20. Health Score Computed on Every Request
-**File:** `src/lib/autopilot/health-score.ts` (lines 439-457)
-
-Every API call to get health recomputes the score from scratch instead of using a cached value except when cache is empty.
-
-### 21. Large Component: TaskModal
+### 19. Zustand Store Updates Without Selectors ⚠️ PARTIALLY FIXED
 **File:** `src/components/TaskModal.tsx`
 
-This component is ~514 lines with 11 tabs. It handles form state, task CRUD, agent selection, planning mode, and more. Should be split into smaller components.
+Updated TaskModal to use `useShallow` for selector optimization. Other components should follow this pattern.
+
+### 20. Health Score Computed on Every Request
+### 21. Large Component: TaskModal
 
 ---
 
 ## Code Smells
 
-### 22. Inconsistent JSON.parse Error Handling
-Multiple patterns across the codebase:
-- Silent catch: `try { JSON.parse(...) } catch { /* ignore */ }`
-- Some places log, others don't
-- No consistent approach to handling parse failures
+### 22. Inconsistent JSON.parse Error Handling ⚠️ PARTIALLY FIXED
 
-### 23. Magic Numbers Without Constants
-- `300000` in `chat-listener.ts` (5 min timeout)
-- `10000` in `client.ts` (connection timeout)
-- `120000` in `stream/route.ts` (health check interval)
-- `5000` in `useSSE.ts` (reconnect delay)
+Fixed in dispatch route. Other locations should be audited.
+
+### 23. Magic Numbers Without Constants ✅ FIXED
+**File:** `src/lib/constants.ts`
+
+Extracted all magic numbers to named constants:
+- `CHAT_REPLY_TIMEOUT_MS`
+- `SSE_RECONNECT_DELAY_MS`
+- `SSE_KEEPALIVE_INTERVAL_MS`
+- `SSE_HEALTH_CHECK_INTERVAL_MS`
+- `DISPATCH_TIMEOUT_MS`
+- `WS_CONNECTION_TIMEOUT_MS`
+- `WS_RECONNECT_DELAY_MS`
+- `SWIPE_BATCH_THRESHOLD`
 
 ### 24. Many Functions Are Large and Do Too Much
-The `POST` handler in `dispatch/route.ts` is ~475 lines doing:
-- Agent catalog sync
-- Task retrieval
-- Dynamic agent selection
-- Gateway connection
-- Session management
-- Cost cap checking
-- Workspace creation
-- Message construction
-- Dispatch delivery
+### 25. No Error Boundary in React Components ✅ FIXED
 
-Should be refactored into smaller functions.
-
-### 25. No Error Boundary in React Components
-There's no React error boundary component wrapping the application. Uncaught errors in components will crash the entire page.
+Created `src/components/ErrorBoundary.tsx` and added to layout.
 
 ---
 
-## Best Practices Missing
+## Best Practices Missing (NOT FIXED)
 
 ### 26. No API Rate Limiting
-No rate limiting on any API endpoints. Malicious or accidental rapid requests can overwhelm the server.
-
 ### 27. No Request Validation Middleware
-While `validation.ts` has Zod schemas, they're not used as middleware - each route manually parses and validates.
-
 ### 28. No Comprehensive Test Suite
-Many `.test.ts` files exist (ab-testing, health-score, gateway-compat, etc.) but core modules like `workspace-isolation.ts`, `swipe.ts`, and `checkpoint.ts` lack tests despite being critical.
-
 ### 29. No API Versioning
-All API routes are at `/api/*` with no versioning. Future changes will be harder.
-
 ### 30. No Comprehensive Logging Structure
-While `logger.ts` exists, there's no structured logging standard. Different modules log with varying levels of detail.
-
 ### 31. Configuration Scattered
-Configuration is spread across:
-- Environment variables (`.env.local`)
-- localStorage (`config.ts`)
-- Database (`products`, `cost_caps` tables)
-
-No unified configuration management strategy.
 
 ---
 
 ## Type Safety Issues
 
-### 32. Any Type Usage
-**File:** `src/lib/openclaw/client.ts` (line 71)
+### 32. Any Type Usage ⚠️ WARNINGS NOW VISIBLE
 
-```typescript
-private generateEventId(data: any): string {
-```
+ESLint now shows warnings instead of allowing `any` type silently.
 
-TypeScript's `no-explicit-any` is disabled in ESLint.
+### 33. Loose Type Definitions ✅ FIXED
+**File:** `src/lib/types.ts`
 
-### 33. Loose Type Definitions
-**File:** `src/lib/types.ts` (lines 853-864)
+Replaced `Record<string, unknown>` with specific typed payloads:
+- `SSETaskPayload`
+- `SSETaskDeletePayload`
+- `SSEAutopilotPayload`
 
-```typescript
-export interface SSEEvent {
-  type: SSEEventType;
-  payload: Task | TaskActivity | TaskDeliverable | {
-    taskId: string;
-    sessionId: string;
-    agentName?: string;
-    summary?: string;
-    deleted?: boolean;
-  } | { id: string; } | Record<string, unknown>;
-}
-```
+### 34. No Type for API Error Responses ✅ FIXED
+**File:** `src/lib/types.ts`
 
-The `Record<string, unknown>` fallback is too loose and defeats the purpose of type safety.
-
-### 34. No Type for API Error Responses
-No consistent `ApiError` or `ApiResponse` types across the API.
+Added `ApiError`, `ApiSuccess<T>`, and `ApiResponse<T>` types.
 
 ---
 
-## Recommended Priority Actions
+## Remaining Recommended Actions
 
-1. **Rotate all credentials** in `.env.local` immediately
-2. **Add API authentication middleware**
-3. **Fix ESLint configuration** - enable `no-unused-vars` and `no-explicit-any`
-4. **Add error boundaries** to React component tree
-5. **Refactor `TaskModal`** into smaller components
-6. **Add rate limiting** to API routes
-7. **Implement request validation middleware**
-8. **Add tests** for critical paths (workspace-isolation, swipe, dispatch)
-9. **Fix SSE reconnect logic** to handle race conditions properly
-10. **Clean up memory leaks** in chat listener and SSE clients
+1. Add API authentication middleware
+2. Fix SQL injection via parameterized queries
+3. Sanitize task titles in execSync calls
+4. Add rate limiting to API routes
+5. Implement request validation middleware
+6. Add tests for critical paths (workspace-isolation, swipe, dispatch)
+7. Cache health score computation
+8. Refactor large functions (especially dispatch/route.ts)
+9. Update remaining components to use Zustand selectors
+10. Audit remaining JSON.parse error handling
