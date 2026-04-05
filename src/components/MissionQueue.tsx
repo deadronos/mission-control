@@ -8,6 +8,7 @@ import { useMissionControl } from '@/lib/store';
 import { triggerAutoDispatch, shouldTriggerAutoDispatch } from '@/lib/auto-dispatch';
 import { getConfig } from '@/lib/config';
 import { useUnreadCounts } from '@/hooks/useUnreadCounts';
+import { getDispatchFailureMessage } from './mission-queue-utils';
 import type { Task, TaskStatus } from '@/lib/types';
 import { TaskModal } from './TaskModal';
 import { formatDistanceToNow } from 'date-fns';
@@ -339,6 +340,7 @@ export function MissionQueue({ workspaceId, mobileMode = false, isPortrait = tru
 
 function AssignedStatusBadge({ task, portraitMode }: { task: Task; portraitMode: boolean }) {
   const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const updatedAt = new Date(task.updated_at).getTime();
   const staleMs = Date.now() - updatedAt;
   const isStale = staleMs > 2 * 60 * 1000; // 2 minutes
@@ -346,14 +348,21 @@ function AssignedStatusBadge({ task, portraitMode }: { task: Task; portraitMode:
   const handleRetryDispatch = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Don't open the task modal
     setRetrying(true);
+    setRetryError(null);
     try {
       const res = await fetch(`/api/tasks/${task.id}/dispatch`, { method: 'POST' });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        logger.error('Retry dispatch failed:', data.error);
+        const bodyText = await res.text();
+        const message = getDispatchFailureMessage(res.status, bodyText);
+        setRetryError(message);
+        logger.error('Retry dispatch failed:', message);
+      } else {
+        setRetryError(null);
       }
     } catch (err) {
-      logger.error('Retry dispatch error:', err);
+      const message = err instanceof Error ? err.message : 'Unknown dispatch error';
+      setRetryError(message);
+      logger.error('Retry dispatch error:', message);
     } finally {
       setRetrying(false);
     }
@@ -374,6 +383,11 @@ function AssignedStatusBadge({ task, portraitMode }: { task: Task; portraitMode:
         >
           {retrying ? 'Dispatching...' : '↻ Retry Dispatch'}
         </button>
+        {retryError && (
+          <p className="text-[11px] leading-snug text-amber-100/90 break-words">
+            {retryError}
+          </p>
+        )}
       </div>
     );
   }
