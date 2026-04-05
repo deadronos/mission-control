@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Configuration Management
  * 
@@ -68,7 +69,7 @@ export function getConfig(): MissionControlConfig {
       return { ...DEFAULT_CONFIG, ...parsed };
     }
   } catch (error) {
-    console.error('Failed to load config:', error);
+    logger.error('Failed to load config:', error);
   }
 
   return DEFAULT_CONFIG;
@@ -104,7 +105,7 @@ export function updateConfig(updates: Partial<MissionControlConfig>): void {
   try {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(updated));
   } catch (error) {
-    console.error('Failed to save config:', error);
+    logger.error('Failed to save config:', error);
     throw new Error('Failed to save configuration');
   }
 }

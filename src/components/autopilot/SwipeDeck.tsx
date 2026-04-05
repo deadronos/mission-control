@@ -1,5 +1,7 @@
 'use client';
 
+
+import { logger } from '@/lib/logger';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ListChecks } from 'lucide-react';
@@ -29,7 +31,7 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
   const [lastSwipe, setLastSwipe] = useState<LastSwipe | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
 
-  const loadDeck = async () => {
+  const loadDeck = useCallback(async () => {
     try {
       const res = await fetch(`/api/products/${productId}/swipe/deck`);
       if (res.ok) {
@@ -39,15 +41,15 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
         setPendingCount(data.length);
       }
     } catch (error) {
-      console.error('Failed to load swipe deck:', error);
+      logger.error('Failed to load swipe deck:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [productId]);
 
   useEffect(() => {
     loadDeck();
-  }, [productId]);
+  }, [loadDeck]);
 
   const handleSwipe = useCallback(async (action: SwipeAction, notes?: string) => {
     const idea = ideas[currentIndex];
@@ -90,7 +92,7 @@ export function SwipeDeck({ productId }: SwipeDeckProps) {
           prev[action === 'fire' ? 'fired' : action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'maybe'] + 1,
       }));
     } catch (error) {
-      console.error('Failed to record swipe:', error);
+      logger.error('Failed to record swipe:', error);
     }
 
     setTimeout(() => {

@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { createHmac } from 'crypto';
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
       const signature = request.headers.get('x-webhook-signature');
       
       if (!signature || !verifyWebhookSignature(signature, rawBody)) {
-        console.warn('[WEBHOOK] Invalid signature attempt');
+        logger.warn('[WEBHOOK] Invalid signature attempt');
         return NextResponse.json(
           { error: 'Unauthorized' },
           { status: 401 }
@@ -199,7 +200,7 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
-    console.error('Agent completion webhook error:', error);
+    logger.error('Agent completion webhook error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
@@ -230,7 +231,7 @@ export async function GET() {
       endpoint: '/api/webhooks/agent-completion'
     });
   } catch (error) {
-    console.error('Failed to fetch completion status:', error);
+    logger.error('Failed to fetch completion status:', error);
     return NextResponse.json(
       { error: 'Failed to fetch status' },
       { status: 500 }

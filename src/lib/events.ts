@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Server-Sent Events (SSE) broadcaster for real-time updates
  * Manages client connections and broadcasts events to all listeners
@@ -37,12 +38,12 @@ export function broadcast(event: SSEEvent): void {
       client.enqueue(encoded);
     } catch (error) {
       // Client disconnected, remove it
-      console.error('Failed to send SSE event to client:', error);
+      logger.error('Failed to send SSE event to client:', error);
       clients.delete(client);
     }
   }
 
-  console.log(`[SSE] Broadcast ${event.type} to ${clients.size} client(s)`);
+  logger.info(`[SSE] Broadcast ${event.type} to ${clients.size} client(s)`);
 }
 
 /**

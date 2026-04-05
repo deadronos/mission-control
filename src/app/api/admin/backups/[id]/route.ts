@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * DELETE /api/admin/backups/[id] — Delete a specific backup
  * 
@@ -39,7 +40,7 @@ export async function DELETE(
       deleted: filename,
     });
   } catch (err) {
-    console.error('[API] Failed to delete backup:', err);
+    logger.error('[API] Failed to delete backup:', err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to delete backup' },
       { status: 500 }

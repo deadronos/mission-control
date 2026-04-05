@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextResponse } from 'next/server';
 import { queryAll } from '@/lib/db';
 import { getOpenClawClient } from '@/lib/openclaw/client';
@@ -27,7 +28,7 @@ export async function GET() {
     try {
       gatewayAgents = await client.listAgents();
     } catch (err) {
-      console.error('Failed to list agents from Gateway:', err);
+      logger.error('Failed to list agents from Gateway:', err);
       return NextResponse.json(
         { error: 'Failed to list agents from OpenClaw Gateway' },
         { status: 502 }
@@ -75,7 +76,7 @@ export async function GET() {
       already_imported: discovered.filter((a) => a.already_imported).length,
     });
   } catch (error) {
-    console.error('Failed to discover agents:', error);
+    logger.error('Failed to discover agents:', error);
     return NextResponse.json(
       { error: 'Failed to discover agents from Gateway' },
       { status: 500 }

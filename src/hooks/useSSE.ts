@@ -5,6 +5,8 @@
 
 'use client';
 
+
+import { logger } from '@/lib/logger';
 import { useEffect, useRef } from 'react';
 import { useMissionControl } from '@/lib/store';
 import { debug } from '@/lib/debug';
@@ -189,7 +191,7 @@ export function useSSE() {
               debug.sse('Unknown event type', sseEvent);
           }
         } catch (error) {
-          console.error('[SSE] Error parsing event:', error);
+          logger.error('[SSE] Error parsing event:', error);
         }
       };
 

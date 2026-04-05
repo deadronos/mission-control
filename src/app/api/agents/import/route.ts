@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { queryOne, queryAll, run, transaction } from '@/lib/db';
@@ -156,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(results, { status: 201 });
   } catch (error) {
-    console.error('Failed to import agents:', error);
+    logger.error('Failed to import agents:', error);
     return NextResponse.json(
       { error: 'Failed to import agents' },
       { status: 500 }

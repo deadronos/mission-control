@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 import { queryAll, queryOne, run, transaction } from '@/lib/db';
 import { getOpenClawClient } from '@/lib/openclaw/client';
 import { normalizeGatewayAgent } from '@/lib/openclaw/gateway-compat';
@@ -98,11 +99,11 @@ export function ensureCatalogSyncScheduled(): void {
   if (g.__mcAgentCatalogTimer) return;
   g.__mcAgentCatalogTimer = setInterval(() => {
     syncGatewayAgentsToCatalog({ reason: 'scheduled' }).catch((err) => {
-      console.error('[AgentCatalog] scheduled sync failed:', err);
+      logger.error('[AgentCatalog] scheduled sync failed:', err);
     });
   }, SYNC_INTERVAL_MS);
   syncGatewayAgentsToCatalog({ reason: 'startup' }).catch((err) => {
-    console.error('[AgentCatalog] startup sync failed:', err);
+    logger.error('[AgentCatalog] startup sync failed:', err);
   });
 }
 

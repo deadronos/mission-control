@@ -1,3 +1,4 @@
+import { logger } from '@/lib/logger';
 /**
  * Subagent Registration API
  * Register OpenClaw sub-agent sessions for tasks
@@ -38,7 +39,7 @@ export async function POST(
     
     if (agent_name) {
       // Check if agent already exists
-      const existingAgent = db.prepare('SELECT id FROM agents WHERE name = ?').get(agent_name) as any;
+      const existingAgent = db.prepare('SELECT id FROM agents WHERE name = ?').get(agent_name) as { id: string } | undefined;
 
       if (existingAgent) {
         agentId = existingAgent.id;
@@ -56,7 +57,7 @@ export async function POST(
           'working'
         );
       } else {
-        console.log(`[Subagent] Dynamic agent generation disabled (ALLOW_DYNAMIC_AGENTS=false), skipping creation of sub-agent "${agent_name}"`);
+        logger.info(`[Subagent] Dynamic agent generation disabled (ALLOW_DYNAMIC_AGENTS=false), skipping creation of sub-agent "${agent_name}"`);
       }
     }
 
@@ -91,7 +92,7 @@ export async function POST(
 
     return NextResponse.json(session, { status: 201 });
   } catch (error) {
-    console.error('Error registering sub-agent:', error);
+    logger.error('Error registering sub-agent:', error);
     return NextResponse.json(
       { error: 'Failed to register sub-agent' },
       { status: 500 }
@@ -124,7 +125,7 @@ export async function GET(
 
     return NextResponse.json(sessions);
   } catch (error) {
-    console.error('Error fetching sub-agents:', error);
+    logger.error('Error fetching sub-agents:', error);
     return NextResponse.json(
       { error: 'Failed to fetch sub-agents' },
       { status: 500 }
