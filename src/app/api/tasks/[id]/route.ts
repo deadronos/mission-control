@@ -1,17 +1,18 @@
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { queryOne, queryAll, run } from '@/lib/db';
+import { getDb, queryOne, queryAll, run } from '@/lib/db';
 import { broadcast } from '@/lib/events';
 import { getMissionControlUrl } from '@/lib/config';
-import { handleStageTransition, handleStageFailure, getTaskWorkflow, drainQueue, populateTaskRolesFromAgents } from '@/lib/workflow-engine';
+import { handleStageTransition, drainQueue, populateTaskRolesFromAgents } from '@/lib/workflow-engine';
 import { hasStageEvidence, canUseBoardOverride, auditBoardOverride, taskCanBeDone, recordLearnerOnTransition } from '@/lib/task-governance';
 import { updateConvoyProgress, checkConvoyCompletion } from '@/lib/convoy';
 import { syncGatewayAgentsToCatalog } from '@/lib/agent-catalog-sync';
 import { triggerWorkspaceMerge } from '@/lib/workspace-isolation';
+import { cleanupTaskBeforeDeletion } from '@/lib/task-deletion';
 import { UpdateTaskSchema } from '@/lib/validation';
 import { getApiToken } from '@/lib/runtime-compat';
-import type { Task, UpdateTaskRequest, Agent, TaskDeliverable } from '@/lib/types';
+import type { Task, UpdateTaskRequest, Agent } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -487,26 +488,11 @@ export async function DELETE(
   try {
     const { id } = await params;
     const existing = queryOne<Task>('SELECT * FROM tasks WHERE id = ?', [id]);
+    const db = getDb();
+    const now = new Date().toISOString();
 
     if (!existing) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 });
-    }
-
-    // Reset agent status if this was their only active task
-    if (existing.assigned_agent_id) {
-      const otherActive = queryOne<{ count: number }>(
-        `SELECT COUNT(*) as count FROM tasks
-         WHERE assigned_agent_id = ?
-           AND status IN ('assigned', 'in_progress', 'testing', 'verification')
-           AND id != ?`,
-        [existing.assigned_agent_id, id]
-      );
-      if (!otherActive || otherActive.count === 0) {
-        run(
-          'UPDATE agents SET status = ?, updated_at = ? WHERE id = ? AND status = ?',
-          ['standby', new Date().toISOString(), existing.assigned_agent_id, 'working']
-        );
-      }
     }
 
     // Delete convoy and its sub-tasks if this is a convoy parent
@@ -515,6 +501,10 @@ export async function DELETE(
       // Delete sub-tasks first (CASCADE handles convoy_subtasks)
       const subtaskIds = queryAll<{ task_id: string }>('SELECT task_id FROM convoy_subtasks WHERE convoy_id = ?', [convoy.id]);
       for (const { task_id } of subtaskIds) {
+        const subtask = queryOne<Task>('SELECT * FROM tasks WHERE id = ?', [task_id]);
+        if (subtask) {
+          cleanupTaskBeforeDeletion(db, subtask, now);
+        }
         run('DELETE FROM work_checkpoints WHERE task_id = ?', [task_id]);
         run('DELETE FROM openclaw_sessions WHERE task_id = ?', [task_id]);
         run('DELETE FROM events WHERE task_id = ?', [task_id]);
@@ -526,6 +516,7 @@ export async function DELETE(
 
     // Delete or nullify related records first (foreign key constraints)
     // Note: task_activities and task_deliverables have ON DELETE CASCADE
+  cleanupTaskBeforeDeletion(db, existing, now);
     run('DELETE FROM work_checkpoints WHERE task_id = ?', [id]);
     run('DELETE FROM openclaw_sessions WHERE task_id = ?', [id]);
     run('DELETE FROM events WHERE task_id = ?', [id]);
