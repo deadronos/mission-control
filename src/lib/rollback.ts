@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger';
 
 import { queryOne, queryAll, run } from '@/lib/db';
 import { broadcast } from '@/lib/events';
-import type { Product, Task } from '@/lib/types';
+import type { Product } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
 // Types

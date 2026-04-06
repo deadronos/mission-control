@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getHealthSummary, getHealthDetail } from '@/lib/health';
+import { getApiToken } from '@/lib/runtime-compat';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
  * bypasses the global auth middleware.
  */
 function isAuthenticated(request: NextRequest): boolean {
-  const token = process.env.MC_API_TOKEN;
+  const token = getApiToken();
 
   // If no token is configured, treat all requests as authenticated (dev mode)
   if (!token) return true;

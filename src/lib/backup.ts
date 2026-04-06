@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
  * for the Mission Control SQLite database.
  * 
  * Backup naming convention: mc-backup-{ISO-timestamp}-v{migration-version}.db
+ * Legacy autensa-backup-* files remain readable for rollback compatibility.
  * Timestamps use dashes instead of colons for filesystem safety.
  * 
  * Safety: restore always creates a pre-restore safety backup first.
@@ -63,10 +64,15 @@ function ensureBackupDir(): string {
 // Backup filename parsing
 // ---------------------------------------------------------------------------
 
-const BACKUP_PATTERN = /^mc-backup-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-v(\d+)\.db$/;
+const BACKUP_PATTERNS = [
+  /^mc-backup-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-v(\d+)\.db$/,
+  /^autensa-backup-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-v(\d+)\.db$/,
+];
 
 function parseBackupFilename(filename: string): { timestamp: string; version: string } | null {
-  const match = filename.match(BACKUP_PATTERN);
+  const match = BACKUP_PATTERNS
+    .map((pattern) => filename.match(pattern))
+    .find(Boolean);
   if (!match) return null;
   // Convert dashes back to colons for valid ISO timestamp
   const timestamp = match[1].replace(/T(\d{2})-(\d{2})-(\d{2})$/, 'T$1:$2:$3');

@@ -2,6 +2,7 @@
 
 
 import { logger } from '@/lib/logger';
+import { isDebugEnabledInStorage } from '@/lib/runtime-compat';
 import { useState, useEffect, useCallback } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -38,7 +39,7 @@ export function SSEDebugPanel() {
 
   useEffect(() => {
     // Check if debug mode is enabled
-    const debugEnabled = localStorage.getItem('MC_DEBUG') === 'true';
+    const debugEnabled = isDebugEnabledInStorage(localStorage);
     setIsEnabled(debugEnabled);
 
     if (!debugEnabled) return;
@@ -67,7 +68,7 @@ export function SSEDebugPanel() {
   // Re-check debug mode on storage changes
   useEffect(() => {
     const handleStorage = () => {
-      const debugEnabled = localStorage.getItem('MC_DEBUG') === 'true';
+      const debugEnabled = isDebugEnabledInStorage(localStorage);
       setIsEnabled(debugEnabled);
     };
 

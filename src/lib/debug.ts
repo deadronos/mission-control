@@ -1,4 +1,9 @@
 import { logger } from '@/lib/logger';
+import {
+  disableDebugInStorage,
+  enableDebugInStorage,
+  isDebugEnabledInStorage,
+} from './runtime-compat';
 /**
  * Debug Logging Utility
  * Enable with localStorage.setItem('MC_DEBUG', 'true')
@@ -7,7 +12,7 @@ import { logger } from '@/lib/logger';
 
 const isDebugEnabled = (): boolean => {
   if (typeof window === 'undefined') return true; // Always log server-side
-  return localStorage.getItem('MC_DEBUG') === 'true';
+  return isDebugEnabledInStorage(localStorage);
 };
 
 export const debug = {
@@ -41,14 +46,14 @@ export const debug = {
 // Enable debug mode helper
 export const enableDebug = () => {
   if (typeof window !== 'undefined') {
-    localStorage.setItem('MC_DEBUG', 'true');
+    enableDebugInStorage(localStorage);
     logger.info('[DEBUG] Debug mode enabled. Refresh to see all logs.');
   }
 };
 
 export const disableDebug = () => {
   if (typeof window !== 'undefined') {
-    localStorage.removeItem('MC_DEBUG');
+    disableDebugInStorage(localStorage);
     logger.info('[DEBUG] Debug mode disabled.');
   }
 };
