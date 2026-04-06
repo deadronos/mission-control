@@ -16,12 +16,21 @@ export function DeleteProductModal({ product, onClose, onArchive, onDeleted }: D
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+    try {
+      const data = await res.json() as { error?: string; message?: string };
+      return data.error || data.message || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
   async function handleArchive() {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/products/${product.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Archive failed');
+      if (!res.ok) throw new Error(await readErrorMessage(res, 'Archive failed'));
       onArchive(product.id);
       onClose();
     } catch (err) {
@@ -37,7 +46,7 @@ export function DeleteProductModal({ product, onClose, onArchive, onDeleted }: D
     setError(null);
     try {
       const res = await fetch(`/api/products/${product.id}?hard=true`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
+      if (!res.ok) throw new Error(await readErrorMessage(res, 'Delete failed'));
       onDeleted(product.id);
       onClose();
     } catch (err) {

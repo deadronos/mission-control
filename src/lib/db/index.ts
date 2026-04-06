@@ -26,10 +26,13 @@ export function getDb(): Database.Database {
     // This handles both new and existing databases
     runMigrations(db);
 
-    // Recover orphaned autopilot cycles from prior crash/restart
-    import('@/lib/autopilot/recovery').then(({ recoverOrphanedCycles }) =>
-      recoverOrphanedCycles().catch(err => logger.warn('[Recovery] Failed:', err))
-    );
+    // Recover orphaned autopilot cycles from prior crash/restart.
+    // Skip this in tests to keep the database isolated and avoid background side effects.
+    if (process.env.NODE_ENV !== 'test') {
+      import('@/lib/autopilot/recovery').then(({ recoverOrphanedCycles }) =>
+        recoverOrphanedCycles().catch(err => logger.warn('[Recovery] Failed:', err))
+      );
+    }
 
     // Keep Mission Control's agent catalog synced with OpenClaw-installed agents
     ensureCatalogSyncScheduled();

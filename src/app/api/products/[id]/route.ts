@@ -60,6 +60,7 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     logger.error('Failed to delete product:', error);
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Failed to delete product';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
