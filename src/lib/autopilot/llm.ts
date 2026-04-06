@@ -6,7 +6,8 @@ import { logger } from '@/lib/logger';
 
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL?.replace('ws://', 'http://').replace('wss://', 'https://') || 'http://127.0.0.1:18789';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
-const DEFAULT_MODEL = process.env.AUTOPILOT_MODEL || 'anthropic/claude-sonnet-4-6';
+const DEFAULT_MODEL = process.env.AUTOPILOT_MODEL || 'openclaw';
+const DEFAULT_MAX_TOKENS = Number(process.env.AUTOPILOT_MAX_TOKENS) || 16384;
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 5_000; // 5s, 10s, 20s exponential backoff
@@ -38,7 +39,7 @@ export async function complete(prompt: string, options: CompletionOptions = {}):
     model = DEFAULT_MODEL,
     systemPrompt,
     temperature = 0.7,
-    maxTokens = 8192,
+    maxTokens = DEFAULT_MAX_TOKENS,
     timeoutMs = DEFAULT_TIMEOUT_MS,
   } = options;
 
