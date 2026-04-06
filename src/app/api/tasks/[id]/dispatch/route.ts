@@ -170,6 +170,33 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
     }
 
+    // Count currently active tasks for this product and check limit
+    if (task.product_id) {
+      const effectiveLimit = (() => {
+        const product = queryOne<Product>('SELECT * FROM products WHERE id = ?', [task.product_id]);
+        if (product?.max_parallel_agents != null) return product.max_parallel_agents;
+        const envLimit = Number(process.env.AUTOPILOT_MAX_PARALLEL_AGENTS);
+        if (!isNaN(envLimit) && envLimit > 0) return envLimit;
+        return 5;
+      })();
+
+      if (effectiveLimit > 0) {
+        const activeCount = queryOne<{ count: number }>(
+          `SELECT COUNT(*) as count FROM tasks
+           WHERE product_id = ? AND status IN ('assigned', 'in_progress', 'convoy_active')`,
+          [task.product_id]
+        );
+        if ((activeCount?.count || 0) >= effectiveLimit) {
+          return NextResponse.json({
+            error: 'Parallel agent limit reached',
+            message: `This product has ${activeCount?.count} active task(s) and the max_parallel_agents limit is ${effectiveLimit}. Wait for a task to complete before dispatching.`,
+            limit: effectiveLimit,
+            active_count: activeCount?.count,
+          }, { status: 429 });
+        }
+      }
+    }
+
     // Build task message for agent
     const priorityEmoji = {
       low: '🔵',

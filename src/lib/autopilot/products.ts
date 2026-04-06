@@ -54,6 +54,7 @@ export function updateProduct(id: string, updates: Partial<{
   cost_cap_per_task: number | null;
   cost_cap_monthly: number | null;
   batch_review_threshold: number;
+  max_parallel_agents: number | null;
 }>): Product | undefined {
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -80,5 +81,10 @@ export function archiveProduct(id: string): boolean {
     `UPDATE products SET status = 'archived', updated_at = ? WHERE id = ?`,
     [new Date().toISOString(), id]
   );
+  return result.changes > 0;
+}
+
+export function hardDeleteProduct(id: string): boolean {
+  const result = run(`DELETE FROM products WHERE id = ?`, [id]);
   return result.changes > 0;
 }
