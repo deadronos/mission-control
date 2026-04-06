@@ -1596,6 +1596,21 @@ const migrations: Migration[] = [
 
       logger.info('[Migration 028] product_skills and skill_reports tables created');
     }
+  },
+  {
+    id: '029',
+    name: 'add_max_parallel_agents',
+    up: (db) => {
+      logger.info('[Migration 029] Adding max_parallel_agents to products...');
+
+      const productsInfo = db.prepare("PRAGMA table_info(products)").all() as { name: string }[];
+      if (!productsInfo.some(col => col.name === 'max_parallel_agents')) {
+        db.exec(`ALTER TABLE products ADD COLUMN max_parallel_agents INTEGER`);
+        logger.info('[Migration 029] Added max_parallel_agents to products');
+      }
+
+      logger.info('[Migration 029] max_parallel_agents migration complete');
+    }
   }
 ];
 
