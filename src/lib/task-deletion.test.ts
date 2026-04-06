@@ -39,6 +39,12 @@ async function createTestDb() {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE workspace_merges (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      workspace_path TEXT NOT NULL
+    );
+
     CREATE TABLE ideas (
       id TEXT PRIMARY KEY,
       task_id TEXT
@@ -92,14 +98,18 @@ test('cleanupTaskBeforeDeletion stops the task session, releases the port, and i
   db.prepare(`INSERT INTO tasks (id, title, assigned_agent_id, status) VALUES (?, ?, ?, ?)`).run('task-1', 'Task 1', 'agent-1', 'in_progress');
   db.prepare(`INSERT INTO openclaw_sessions (id, agent_id, task_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)`).run('session-1', 'agent-1', 'task-1', now, now);
   db.prepare(`INSERT INTO workspace_ports (id, task_id, port, status, created_at) VALUES (?, ?, 4201, 'active', ?)`).run('port-1', 'task-1', now);
+  db.prepare(`INSERT INTO workspace_merges (id, task_id, workspace_path) VALUES (?, ?, ?)`).run('merge-1', 'task-1', '/tmp/task-1');
 
   cleanupTaskBeforeDeletion(db, { id: 'task-1', assigned_agent_id: 'agent-1' }, now);
 
   const session = db.prepare(`SELECT status, ended_at FROM openclaw_sessions WHERE id = ?`).get('session-1') as { status: string; ended_at: string | null };
   assert.deepEqual(session, { status: 'ended', ended_at: now });
 
-  const port = db.prepare(`SELECT status, released_at FROM workspace_ports WHERE id = ?`).get('port-1') as { status: string; released_at: string | null };
-  assert.deepEqual(port, { status: 'released', released_at: now });
+  const portCount = db.prepare(`SELECT COUNT(*) as count FROM workspace_ports WHERE id = ?`).get('port-1') as { count: number };
+  assert.equal(portCount.count, 0);
+
+  const mergeCount = db.prepare(`SELECT COUNT(*) as count FROM workspace_merges WHERE id = ?`).get('merge-1') as { count: number };
+  assert.equal(mergeCount.count, 0);
 
   const agent = db.prepare(`SELECT status FROM agents WHERE id = ?`).get('agent-1') as { status: string };
   assert.equal(agent.status, 'standby');

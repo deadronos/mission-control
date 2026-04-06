@@ -33,6 +33,9 @@ export function cleanupTaskBeforeDeletion(db: CleanupDb, task: DeletableTask, no
      WHERE task_id = ? AND status = 'active'`,
     [now, task.id]
   );
+  runIfTableExists(db, 'workspace_ports', `DELETE FROM workspace_ports WHERE task_id = ?`, [task.id]);
+
+  runIfTableExists(db, 'workspace_merges', `DELETE FROM workspace_merges WHERE task_id = ?`, [task.id]);
 
   runIfTableExists(db, 'ideas', `UPDATE ideas SET task_id = NULL WHERE task_id = ?`, [task.id]);
   runIfTableExists(db, 'conversations', `UPDATE conversations SET task_id = NULL WHERE task_id = ?`, [task.id]);
