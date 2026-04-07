@@ -22,24 +22,26 @@ import type { Product, Task } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET?.trim();
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+if (!GITHUB_WEBHOOK_SECRET && !IS_PRODUCTION) {
+  logger.warn('[GitHub Webhook] No GITHUB_WEBHOOK_SECRET set — signature validation is disabled in local dev');
+}
+
 // ---------------------------------------------------------------------------
 // Signature verification
 // ---------------------------------------------------------------------------
 
 function verifyGitHubSignature(signature: string | null, rawBody: string): boolean {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET;
-
-  if (!secret) {
-    // Dev mode — skip validation but log warning
-    logger.warn('[GitHub Webhook] No GITHUB_WEBHOOK_SECRET set — skipping signature validation');
-    return true;
-  }
-
   if (!signature) return false;
 
-  const expected = 'sha256=' + createHmac('sha256', secret).update(rawBody).digest('hex');
-  if (signature.length !== expected.length) return false;
-  return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  const expected = 'sha256=' + createHmac('sha256', GITHUB_WEBHOOK_SECRET ?? '').update(rawBody).digest('hex');
+  const received = Buffer.from(signature.trim());
+  const expectedBuffer = Buffer.from(expected);
+
+  if (received.length !== expectedBuffer.length) return false;
+  return timingSafeEqual(received, expectedBuffer);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +180,14 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get('x-hub-signature-256');
 
-  if (!verifyGitHubSignature(signature, rawBody)) {
+  if (!GITHUB_WEBHOOK_SECRET) {
+    if (IS_PRODUCTION) {
+      logger.error('[GitHub Webhook] GITHUB_WEBHOOK_SECRET is required in production');
+      return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+    }
+  }
+
+  if (GITHUB_WEBHOOK_SECRET && !verifyGitHubSignature(signature, rawBody)) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
   }
 

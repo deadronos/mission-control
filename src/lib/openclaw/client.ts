@@ -63,6 +63,18 @@ export class OpenClawClient extends EventEmitter {
   private readonly PERIODIC_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Cleanup every 5 minutes
   private periodicCleanupTimer: NodeJS.Timeout | null = null;
 
+  private rejectPendingRequests(message: string): void {
+    if (this.pendingRequests.size === 0) {
+      return;
+    }
+
+    const error = new Error(message);
+    this.pendingRequests.forEach(({ reject }) => {
+      reject(error);
+    });
+    this.pendingRequests.clear();
+  }
+
   /**
    * Generate a unique event ID using stable identifiers for proper deduplication.
    * This avoids hashing complex nested payloads to prevent incorrectly ignoring updates.
@@ -232,6 +244,7 @@ export class OpenClawClient extends EventEmitter {
           this.authenticated = false;
           this.connecting = null;
           this.messageHandlers.clear(); // Clear handlers on disconnect
+          this.rejectPendingRequests('Connection closed');
           // Note: globalProcessedEvents is NOT cleared as it's shared across all instances
           this.emit('disconnected');
           // Log close reason for debugging
@@ -561,6 +574,7 @@ export class OpenClawClient extends EventEmitter {
     this.authenticated = false;
     this.connecting = null;
     this.messageHandlers.clear(); // Clear all tracked handlers
+    this.rejectPendingRequests('Connection closed');
     // Note: globalProcessedEvents is NOT cleared as it's shared across all instances
   }
 
