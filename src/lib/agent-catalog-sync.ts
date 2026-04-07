@@ -56,7 +56,7 @@ export async function syncGatewayAgentsToCatalog(options?: { force?: boolean; re
         if (existingId) {
           run(
             `UPDATE agents
-             SET name = ?, role = ?, model = COALESCE(?, model), source = 'gateway',
+             SET name = ?, role = CASE WHEN role IS NULL OR role = 'builder' THEN ? ELSE role END, model = COALESCE(?, model), source = 'gateway',
                  session_key_prefix = COALESCE(session_key_prefix, ?), updated_at = ?
              WHERE id = ?`,
             [name, role, ga.model || null, defaultSessionKeyPrefix, ts, existingId]
