@@ -8,13 +8,15 @@ import { listBackups } from './backup';
 test('listBackups recognizes Mission Control and legacy Autensa backup filenames', async () => {
   const originalCwd = process.cwd();
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-backups-'));
-  const backupDir = path.join(tempDir, 'backups');
-  fs.mkdirSync(backupDir, { recursive: true });
+  const canonicalBackupDir = path.join(tempDir, 'db-backups');
+  const legacyBackupDir = path.join(tempDir, 'backups');
+  fs.mkdirSync(canonicalBackupDir, { recursive: true });
+  fs.mkdirSync(legacyBackupDir, { recursive: true });
 
   try {
-    fs.writeFileSync(path.join(backupDir, 'mc-backup-2026-04-05T10-11-13-v004.db'), 'mc');
-    fs.writeFileSync(path.join(backupDir, 'autensa-backup-2026-04-05T10-11-12-v003.db'), 'autensa');
-    fs.writeFileSync(path.join(backupDir, 'pre-restore-2026-04-05T10-11-14.db'), 'restore');
+    fs.writeFileSync(path.join(canonicalBackupDir, 'mc-backup-2026-04-05T10-11-13-v004.db'), 'mc');
+    fs.writeFileSync(path.join(legacyBackupDir, 'autensa-backup-2026-04-05T10-11-12-v003.db'), 'autensa');
+    fs.writeFileSync(path.join(canonicalBackupDir, 'pre-restore-2026-04-05T10-11-14.db'), 'restore');
 
     process.chdir(tempDir);
 

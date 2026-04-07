@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger';
  * Safety: restore always creates a pre-restore safety backup first.
  */
 
+import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { getDb, closeDb } from '@/lib/db';
@@ -46,18 +47,60 @@ export interface RestoreResult {
 // Paths
 // ---------------------------------------------------------------------------
 
+const CANONICAL_BACKUP_DIR = 'db-backups';
+const LEGACY_BACKUP_DIR = 'backups';
+
 function getDbPath(): string {
   return process.env.DATABASE_PATH || path.join(/* turbopackIgnore: true */ process.cwd(), 'mission-control.db');
 }
 
 function getBackupDir(): string {
-  return path.join(/* turbopackIgnore: true */ process.cwd(), 'backups');
+  return path.join(/* turbopackIgnore: true */ process.cwd(), CANONICAL_BACKUP_DIR);
+}
+
+function getLegacyBackupDir(): string {
+  return path.join(/* turbopackIgnore: true */ process.cwd(), LEGACY_BACKUP_DIR);
+}
+
+function getBackupDirs(): string[] {
+  const canonical = getBackupDir();
+  const legacy = getLegacyBackupDir();
+
+  if (canonical === legacy) {
+    return [canonical];
+  }
+
+  return [canonical, legacy];
 }
 
 function ensureBackupDir(): string {
   const dir = getBackupDir();
   fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+function resolveBackupPath(filename: string): string | null {
+  for (const backupDir of getBackupDirs()) {
+    const filepath = path.join(backupDir, filename);
+    if (fs.existsSync(filepath)) {
+      return filepath;
+    }
+  }
+
+  return null;
+}
+
+function verifyDatabaseIntegrity(dbPath: string): void {
+  const verificationDb = new Database(dbPath, { readonly: true, fileMustExist: true });
+
+  try {
+    const row = verificationDb.prepare('PRAGMA integrity_check(1)').get() as { integrity_check?: string } | undefined;
+    if (!row || row.integrity_check !== 'ok') {
+      throw new Error(`Database integrity check failed: ${row?.integrity_check || 'unknown result'}`);
+    }
+  } finally {
+    verificationDb.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -148,45 +191,52 @@ export async function createBackup(): Promise<BackupResult> {
 // ---------------------------------------------------------------------------
 
 export async function listBackups(): Promise<BackupMetadata[]> {
-  const backupDir = getBackupDir();
+  const backups = new Map<string, BackupMetadata>();
 
-  if (!fs.existsSync(backupDir)) {
-    return [];
-  }
-
-  const files = fs.readdirSync(backupDir);
-  const backups: BackupMetadata[] = [];
-
-  for (const filename of files) {
-    const parsed = parseBackupFilename(filename);
-    // Also include pre-restore safety backups
-    const isPreRestore = filename.startsWith('pre-restore-') && filename.endsWith('.db');
-
-    if (!parsed && !isPreRestore) continue;
-
-    const filepath = path.join(backupDir, filename);
-
-    try {
-      const stat = fs.statSync(filepath);
-      backups.push({
-        filename,
-        filepath,
-        size: stat.size,
-        timestamp: parsed?.timestamp || stat.birthtime.toISOString(),
-        migrationVersion: parsed?.version || 'unknown',
-        location: 'local', // S3 status checked separately if needed
-        createdAt: stat.birthtime.toISOString(),
-      });
-    } catch {
-      // Skip files we can't stat
+  for (const backupDir of getBackupDirs()) {
+    if (!fs.existsSync(backupDir)) {
       continue;
+    }
+
+    const files = fs.readdirSync(backupDir);
+
+    for (const filename of files) {
+      const parsed = parseBackupFilename(filename);
+      // Also include pre-restore safety backups
+      const isPreRestore = filename.startsWith('pre-restore-') && filename.endsWith('.db');
+
+      if (!parsed && !isPreRestore) continue;
+
+      const filepath = path.join(backupDir, filename);
+
+      try {
+        const stat = fs.statSync(filepath);
+        if (backups.has(filename)) {
+          continue;
+        }
+
+        backups.set(filename, {
+          filename,
+          filepath,
+          size: stat.size,
+          timestamp: parsed?.timestamp || stat.birthtime.toISOString(),
+          migrationVersion: parsed?.version || 'unknown',
+          location: 'local', // S3 status checked separately if needed
+          createdAt: stat.birthtime.toISOString(),
+        });
+      } catch {
+        // Skip files we can't stat
+        continue;
+      }
     }
   }
 
-  // Sort newest first
-  backups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const localBackups = Array.from(backups.values());
 
-  return backups;
+  // Sort newest first
+  localBackups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  return localBackups;
 }
 
 // ---------------------------------------------------------------------------
@@ -194,17 +244,17 @@ export async function listBackups(): Promise<BackupMetadata[]> {
 // ---------------------------------------------------------------------------
 
 export async function restoreBackup(filename: string): Promise<RestoreResult> {
-  const backupDir = getBackupDir();
-  const backupPath = path.join(backupDir, filename);
-
-  // Validate the backup file exists
-  if (!fs.existsSync(backupPath)) {
-    throw new Error(`Backup file not found: ${filename}`);
-  }
-
   // Validate filename doesn't contain path traversal
   if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
     throw new Error('Invalid backup filename');
+  }
+
+  const backupDir = ensureBackupDir();
+  const backupPath = resolveBackupPath(filename);
+
+  // Validate the backup file exists in either the canonical or legacy directory
+  if (!backupPath) {
+    throw new Error(`Backup file not found: ${filename}`);
   }
 
   const dbPath = getDbPath();
@@ -233,6 +283,9 @@ export async function restoreBackup(filename: string): Promise<RestoreResult> {
     if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
     if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
 
+    // 4. Verify the restored database opens cleanly before handing it back
+    verifyDatabaseIntegrity(dbPath);
+
     logger.info(`[Backup] Restored from: ${filename}`);
   } catch (err) {
     // If restore fails, try to re-open the DB (which may use the safety backup)
@@ -258,14 +311,15 @@ export async function deleteBackup(filename: string): Promise<void> {
     throw new Error('Invalid backup filename');
   }
 
-  const backupDir = getBackupDir();
-  const filepath = path.join(backupDir, filename);
+  const filepaths = getBackupDirs().map((backupDir) => path.join(backupDir, filename)).filter((filepath) => fs.existsSync(filepath));
 
-  if (!fs.existsSync(filepath)) {
+  if (filepaths.length === 0) {
     throw new Error(`Backup file not found: ${filename}`);
   }
 
-  fs.unlinkSync(filepath);
+  for (const filepath of filepaths) {
+    fs.unlinkSync(filepath);
+  }
   logger.info(`[Backup] Deleted: ${filename}`);
 
   // Optionally delete from S3

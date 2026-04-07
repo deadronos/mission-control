@@ -1,32 +1,39 @@
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { getDb, queryOne, queryAll, run } from '@/lib/db';
 import { findTaskForSessionCompletion } from '@/lib/openclaw/completion-routing';
-import type { Task, Agent, OpenClawSession } from '@/lib/types';
+import type { Task, OpenClawSession } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET?.trim();
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+
+if (!WEBHOOK_SECRET && !IS_PRODUCTION) {
+  logger.warn('[WEBHOOK] No WEBHOOK_SECRET set — signature validation is disabled in local dev');
+}
 /**
  * Verify HMAC-SHA256 signature of webhook request
  */
 function verifyWebhookSignature(signature: string, rawBody: string): boolean {
-  const webhookSecret = process.env.WEBHOOK_SECRET;
-  
-  if (!webhookSecret) {
-    // Dev mode - skip validation
-    return true;
-  }
-
   if (!signature) {
     return false;
   }
 
-  const expectedSignature = createHmac('sha256', webhookSecret)
+  const expectedSignature = createHmac('sha256', WEBHOOK_SECRET ?? '')
     .update(rawBody)
     .digest('hex');
 
-  return signature === expectedSignature;
+  const received = Buffer.from(signature.trim());
+  const expected = Buffer.from(expectedSignature);
+
+  if (received.length !== expected.length) {
+    return false;
+  }
+
+  return timingSafeEqual(received, expected);
 }
 
 /**
@@ -49,10 +56,13 @@ export async function POST(request: NextRequest) {
   try {
     // Read raw body for signature verification
     const rawBody = await request.text();
-    
-    // Verify webhook signature if WEBHOOK_SECRET is set
-    const webhookSecret = process.env.WEBHOOK_SECRET;
-    if (webhookSecret) {
+
+    if (!WEBHOOK_SECRET) {
+      if (IS_PRODUCTION) {
+        logger.error('[WEBHOOK] WEBHOOK_SECRET is required in production');
+        return NextResponse.json({ error: 'Webhook secret not configured' }, { status: 503 });
+      }
+    } else {
       const signature = request.headers.get('x-webhook-signature');
       
       if (!signature || !verifyWebhookSignature(signature, rawBody)) {
