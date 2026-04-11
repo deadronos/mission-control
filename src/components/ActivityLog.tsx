@@ -53,6 +53,7 @@ export function ActivityLog({ taskId }: ActivityLogProps) {
     try {
       const res = await fetch(`/api/tasks/${taskId}/activities`);
       if (res.ok) {
+        setError(null);
         const data = await res.json();
         if (data.length !== lastCountRef.current) {
           setActivities(data);
