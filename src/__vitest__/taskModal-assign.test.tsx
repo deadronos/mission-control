@@ -19,7 +19,7 @@ vi.mock('@/lib/auto-dispatch', () => ({ triggerAutoDispatch: triggerAutoDispatch
 
 describe('TaskModal assign & auto-dispatch', () => {
   it('triggers auto-dispatch when a new task is saved with an agent assigned', async () => {
-    (global as any).fetch = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ id: 't1', title: 'New Task', assigned_agent_id: 'agent1', status: 'assigned', workspace_id: 'default' }) });
+    (global as any).fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 't1', title: 'New Task', assigned_agent_id: 'agent1', status: 'assigned', workspace_id: 'default' }) });
 
     const onClose = vi.fn();
     const TaskModalModule = await import('@/components/TaskModal');
