@@ -129,132 +129,17 @@ I highly recommend getting Hetzner VPS to run this. <a href="https://hetzner.clo
 
 Mission Control v2 is a ground-up expansion from task orchestration dashboard to **the world's first autonomous product improvement engine**. It researches your market, generates feature ideas, lets you decide with a swipe, and builds them — automatically.
 
-### 🔬 Product Autopilot — The Full Pipeline
+### 🔬 Product Autopilot
 
-The headline feature. Point Mission Control at any product (repo + live URL) and it runs a continuous improvement loop:
+Mission Control turns product input into research, ideas, builds, and PRs. The detailed workflows live in the docs so this README stays short and stops repeating itself.
 
-1. **Autonomous Research** — AI agents analyze your codebase, scan your live site, and research your market: competitors, user intent, conversion patterns, SEO gaps, technical opportunities. Runs on configurable schedules — daily, weekly, or on-demand.
+- **Autopilot flow** → `docs/HOW-THE-PIPELINE-WORKS.md`
+- **Orchestration commands & task lifecycle** → `ORCHESTRATION.md`
+- **Realtime events & SSE contract** → `docs/REALTIME_SPEC.md`
+- **How to verify realtime locally** → `docs/TESTING_REALTIME.md`
+- **Convoy / parallel builds** → `specs/convoy-mode-spec.md`
 
-2. **AI-Powered Ideation** — Research feeds into ideation agents that generate concrete, scored feature ideas. Each idea includes an impact score, feasibility score, size estimate, technical approach, and a direct link to the research that inspired it.
-
-3. **Swipe to Decide** — Ideas appear as cards in a Tinder-style interface. Four actions:
-   - **Pass** — Rejected. The preference model learns from it.
-   - **Maybe** — Saved to the Maybe Pool. Resurfaces in 1 week with fresh context.
-   - **Yes** — Task created. Build agent starts coding.
-   - **Now!** — Urgent dispatch. Priority queue, immediate execution.
-
-4. **Automated Build → PR** — Approved ideas flow through the full agent pipeline: Build agent implements the feature → Test agent runs the suite → Review agent inspects the diff → Pull request created on GitHub with full context.
-
-**Your only job is the swipe.** Everything else is automated.
-
-### 📄 Product Program (Karpathy AutoResearch Pattern)
-
-Inspired by Andrej Karpathy's [AutoResearch](https://github.com/karpathy/autoresearch) architecture. Each product has a **Product Program** — a living document that instructs research and ideation agents on what to look for, what matters, and what to ignore. The program evolves as swipe data accumulates: the system learns your taste, not just patterns.
-
-### 🚛 Convoy Mode — Parallel Multi-Agent Execution
-
-Large features get decomposed into subtasks with a visual dependency graph (DAG). Multiple agents (3–5) work simultaneously with dependency-aware scheduling:
-
-- **Parallel subtask execution** — Independent pieces run concurrently
-- **Dependency graph visualization** — See what depends on what
-- **Health monitoring** — Detects stalled, stuck, or zombie agents automatically
-- **Auto-nudge** — Reassigns or restarts agents that go dark
-- **Crash recovery** — Checkpoints save agent progress; work resumes from last checkpoint, not from scratch
-
-### 💬 Operator Chat — Talk to Agents Mid-Build
-
-Don't wait for a PR to give feedback. Two communication modes:
-
-- **Queued Notes** — Add context ("use the existing auth middleware") that gets delivered at the agent's next checkpoint
-- **Direct Messages** — Delivered immediately to the agent's active session for real-time course correction
-
-Full chat history preserved per task — every message, note, and response.
-
-### 💰 Cost Tracking & Budget Caps
-
-Granular spend visibility across every dimension:
-
-- **Per-task cost tracking** — See exactly what each feature costs to build
-- **Per-product aggregation** — Total spend across all tasks for a product
-- **Daily and monthly caps** — Set budget limits that auto-pause dispatch when exceeded
-- **Cost breakdown API** — Detailed reports by agent, model, and time period
-
-### 🧠 Knowledge Base & Learner Agent
-
-A dedicated Learner agent captures lessons from every build cycle — what worked, what failed, what patterns emerged. Knowledge entries are injected into future dispatches so agents don't repeat mistakes.
-
-### 📋 Enhanced Planning Phase
-
-Before any build starts, agents run a structured planning phase:
-
-- AI asks clarifying questions about requirements and constraints
-- Generates a detailed spec from your answers
-- Multi-agent planning specs with sub-agent definitions and execution steps
-- Approval gate — you review the plan before any code is written
-
-### 🔄 Checkpoint & Crash Recovery
-
-Agent progress is saved at configurable checkpoints:
-
-- If a session crashes, work resumes from the last checkpoint — not from scratch
-- Checkpoint restore API for manual recovery
-- Checkpoint history visible per task
-
-### 🎯 Preference Learning
-
-Every swipe trains a per-product preference model:
-
-- Category weights (growth, SEO, UX, etc.) adjust based on approvals/rejections
-- Complexity preferences calibrate over time
-- Tag pattern recognition refines idea generation
-- Ideas get sharper with every iteration
-
-### 🔁 Maybe Pool
-
-Ideas you're not sure about don't disappear:
-
-- Swiped "Maybe" ideas enter a holding pool
-- Automatically resurface after a configurable period with new market context
-- Batch re-evaluation mode to review accumulated maybes
-- Can be promoted to Yes at any time
-
-### 📡 Live Activity Feed
-
-Real-time SSE stream of everything happening across all products:
-
-- Research progress, ideation cycles, swipe events
-- Build progress, test results, review outcomes
-- Agent health events, cost updates, PR creation
-- Filterable by product, agent, and event type
-
-### 🛡️ Automation Tiers
-
-Choose your comfort level per product:
-
-| Tier | Behavior | Best For |
-|:-----|:---------|:---------|
-| **Supervised** | PRs created automatically. You review and merge manually. | Production apps |
-| **Semi-Auto** | PRs auto-merge when CI passes and review agent approves. | Staging & trusted repos |
-| **Full Auto** | Everything automated end-to-end. Idea → deployed feature. | Side projects & MVPs |
-
-### 🔀 Workspace Isolation
-
-Each build task gets an isolated workspace:
-
-- **Git Worktrees** for repo-backed projects — isolated branch, no conflicts with other agents
-- **Task Sandboxes** for local/no-repo projects — dedicated directory under `.workspaces/task-{id}/`
-- **Port allocation** (4200–4299 range) for dev servers — no port conflicts between concurrent builds
-- **Serialized merge queue** — completed tasks merge one at a time with conflict detection
-- **Product-scoped locking** — concurrent completions for the same product queue automatically
-
-### 📊 Product Scheduling
-
-Configure autonomous cycles per product:
-
-- Research frequency (daily, weekly, custom cron)
-- Ideation frequency (after each research cycle, or independent schedule)
-- Auto-dispatch rules (immediate on "Yes" swipe, or batch)
-- Schedule management UI with enable/disable per schedule
+Core features still include research, ideation, swipe decisions, build → test → review automation, planning, cost tracking, learner memory, workspace isolation, and scheduling. The docs above are the source of truth for the step-by-step details.
 
 ---
 

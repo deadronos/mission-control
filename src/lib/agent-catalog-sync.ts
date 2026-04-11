@@ -20,6 +20,10 @@ function normalizeRole(name: string): string {
 }
 
 export async function syncGatewayAgentsToCatalog(options?: { force?: boolean; reason?: string }): Promise<number> {
+  if (process.env.NODE_ENV === 'test' && !options?.force) {
+    return 0;
+  }
+
   const force = Boolean(options?.force);
   const now = Date.now();
   if (!force && now - lastSyncAt < SYNC_INTERVAL_MS) {
