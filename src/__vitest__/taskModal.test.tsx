@@ -29,7 +29,7 @@ describe('TaskModal (create flow)', () => {
   it('saves a new task and calls onClose', async () => {
     const onClose = vi.fn();
     const TaskModalModule = await import('@/components/TaskModal');
-    const TaskModal = TaskModalModule.TaskModal || TaskModalModule.default || TaskModalModule;
+    const TaskModal = (TaskModalModule as any).TaskModal || (TaskModalModule as any).default || (TaskModalModule as any);
 
     render(<TaskModal onClose={onClose} />);
 
