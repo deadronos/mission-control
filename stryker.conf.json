@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "mutate": [
+    "src/**/*.{ts,tsx}",
+    "!src/**/*.test.*",
+    "!src/__vitest__/**"
+  ],
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.config.ts"
+  },
+  "reporters": ["html", "clear-text", "progress"],
+  "coverageAnalysis": "off",
+  "plugins": ["@stryker-mutator/vitest-runner"]
+}

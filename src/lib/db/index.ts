@@ -6,7 +6,15 @@ import { schema } from './baseline';
 import { runMigrations } from './migrations';
 import { ensureCatalogSyncScheduled } from '@/lib/agent-catalog-sync';
 
-const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), 'mission-control.db');
+const DB_PATH = (() => {
+  // For test runs, default to a per-process file under .tmp so parallel workers don't collide.
+  if (process.env.NODE_ENV === 'test' && !process.env.DATABASE_PATH) {
+    const tmpDir = path.join(process.cwd(), '.tmp');
+    try { fs.mkdirSync(tmpDir, { recursive: true }); } catch (e) { /* ignore */ }
+    return path.join(tmpDir, `mission-control-test-${process.pid}.db`);
+  }
+  return process.env.DATABASE_PATH || path.join(process.cwd(), 'mission-control.db');
+})();
 
 let db: Database.Database | null = null;
 
