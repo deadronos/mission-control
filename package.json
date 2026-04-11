@@ -11,7 +11,15 @@
     "db:seed": "tsx src/lib/db/seed.ts",
     "db:backup": "mkdir -p db-backups && sqlite3 mission-control.db 'PRAGMA wal_checkpoint(TRUNCATE);' && cp mission-control.db db-backups/mission-control.db.backup && echo 'Backed up to db-backups/mission-control.db.backup'",
     "db:restore": "cp db-backups/mission-control.db.backup mission-control.db && echo 'Restored from db-backups/mission-control.db.backup'",
-    "db:reset": "rm -f mission-control.db mission-control.db-* && npm run db:seed"
+    "db:reset": "rm -f mission-control.db mission-control.db-* && npm run db:seed",
+    "test:unit": "vitest",
+    "test:unit:run": "vitest run",
+    "coverage:unit": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "coverage:check": "node scripts/check-coverage.js",
+    "test:node:inmemory": "NODE_ENV=test DATABASE_PATH=:memory: tsx --test --test-concurrency=1 src/**/*.test.ts",
+    "mutation": "npx stryker run",
+    "mutation:html": "npx stryker run --reporter html"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1014.0",
@@ -34,19 +42,30 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/html-reporter": "^3.1.0",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/css-tree": "^2.3.11",
+    "@types/jest": "^30.0.0",
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@types/testing-library__react": "^10.0.1",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-istanbul": "^4.1.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.2",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "jsdom": "^29.0.2",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   }
 }

@@ -187,7 +187,7 @@ test('hardDeleteProduct removes product subtree and task-linked rows', () => {
   ] as const;
 
   for (const [label, sql, params] of checks) {
-    const row = queryOne<{ c: number }>(sql, params as unknown[]);
+    const row = queryOne<{ c: number }>(sql, params as unknown as any[]);
     assert.equal(row?.c, 0, `${label} rows should be removed`);
   }
 });

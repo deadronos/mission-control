@@ -1,3 +1,5 @@
+[![Coverage](https://img.shields.io/codecov/c/gh/deadronos/mission-control.svg)](https://codecov.io/gh/OWNER/REPO)
+
 <h1 align="center">Mission Control</h1>
 
 <p align="center">
