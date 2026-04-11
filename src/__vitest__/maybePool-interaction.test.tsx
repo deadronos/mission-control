@@ -22,7 +22,7 @@ describe('MaybePool interaction', () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalled();
-      const calledResurface = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes('/api/products/p1/maybe/e1/resurface'));
+      const calledResurface = fetchMock.mock.calls.find((c: any[]) => String(c[0]).includes(`/api/products/p1/maybe/${entry.idea_id}/resurface`));
       expect(calledResurface).toBeTruthy();
     });
 

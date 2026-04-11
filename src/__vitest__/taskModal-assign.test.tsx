@@ -29,8 +29,10 @@ describe('TaskModal assign & auto-dispatch', () => {
 
     fireEvent.change(screen.getByPlaceholderText('What needs to be done?'), { target: { value: 'My Task' } });
 
-    const select = screen.getByRole('combobox');
-    fireEvent.change(select, { target: { value: 'agent1' } });
+    const selects = screen.getAllByRole('combobox');
+    const assignSelect = selects.find(s => Array.from((s as HTMLSelectElement).options).some(opt => opt.value === 'agent1' || String(opt.text).includes('Agent A')));
+    if (!assignSelect) throw new Error('assign select not found');
+    fireEvent.change(assignSelect as HTMLElement, { target: { value: 'agent1' } });
 
     fireEvent.click(screen.getByText('Save'));
 
