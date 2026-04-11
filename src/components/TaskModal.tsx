@@ -1,11 +1,10 @@
 'use client';
 
-
 import { logger } from '@/lib/logger';
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useShallow } from 'zustand/react/shallow';
-import { X, Save, Trash2, Activity, Package, Bot, ClipboardList, Plus, Users, ImageIcon, Truck, Radio, MessageSquare, ExternalLink, HardDrive } from 'lucide-react';
+import { X, Save, Trash2, Activity, Package, Bot, ClipboardList, Plus, Users, ImageIcon, Truck, Radio, MessageSquare, HardDrive } from 'lucide-react';
 import { useMissionControl } from '@/lib/store';
 import { triggerAutoDispatch, shouldTriggerAutoDispatch } from '@/lib/auto-dispatch';
 import { ActivityLog } from './ActivityLog';
@@ -19,6 +18,7 @@ import { ConvoyTab } from './ConvoyTab';
 import { AgentLiveTab } from './AgentLiveTab';
 import { TaskChatTab } from './TaskChatTab';
 import { WorkspaceTab } from './WorkspaceTab';
+import { TaskModalOverviewForm, type TaskModalFormValues } from './TaskModalOverviewForm';
 import type { Task, TaskPriority, TaskStatus } from '@/lib/types';
 
 type TabType = 'overview' | 'planning' | 'convoy' | 'team' | 'activity' | 'deliverables' | 'images' | 'sessions' | 'workspace' | 'agent-live' | 'chat';
@@ -52,7 +52,7 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
     router.refresh();
   }, [router]);
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<TaskModalFormValues>({
     title: task?.title || '',
     description: task?.description || '',
     priority: task?.priority || 'normal' as TaskPriority,
@@ -102,8 +102,23 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
       });
 
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: 'Unknown error' }));
-        setSaveError(errData.error || `Save failed (${res.status})`);
+        const raw = await res.text();
+        let errData: { error?: string; details?: unknown } = {};
+        try {
+          errData = raw ? JSON.parse(raw) : {};
+        } catch {
+          errData = { error: raw };
+        }
+
+        const detailText = Array.isArray(errData.details)
+          ? errData.details
+              .map((issue) => typeof issue === 'object' && issue && 'message' in issue ? String((issue as { message?: string }).message) : String(issue))
+              .join('; ')
+          : typeof errData.details === 'string'
+            ? errData.details
+            : '';
+
+        setSaveError([errData.error || `Save failed (${res.status})`, detailText].filter(Boolean).join(' · '));
         return;
       }
 
@@ -260,148 +275,18 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
         <div className="flex-1 overflow-y-auto p-4">
           {/* Overview Tab */}
           {activeTab === 'overview' && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Title</label>
-            <input
-              type="text"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              required
-              className="w-full min-h-11 bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
-              placeholder="What needs to be done?"
+            <TaskModalOverviewForm
+              task={task}
+              agents={agents}
+              form={form}
+              setForm={setForm}
+              usePlanningMode={usePlanningMode}
+              setUsePlanningMode={setUsePlanningMode}
+              priorities={priorities}
+              saveError={saveError}
+              onAddAgent={() => setShowAgentModal(true)}
+              onSubmit={(e) => handleSubmit(e)}
             />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={3}
-              className="w-full bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent resize-none"
-              placeholder="Add details..."
-            />
-          </div>
-
-          {/* Planning Mode Toggle - only for new tasks */}
-          {!task && (
-            <div className="p-3 bg-mc-bg rounded-lg border border-mc-border">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={usePlanningMode}
-                  onChange={(e) => setUsePlanningMode(e.target.checked)}
-                  className="w-4 h-4 mt-0.5 rounded border-mc-border"
-                />
-                <div>
-                  <span className="font-medium text-sm flex items-center gap-2">
-                    <ClipboardList className="w-4 h-4 text-mc-accent" />
-                    Enable Planning Mode
-                  </span>
-                  <p className="text-xs text-mc-text-secondary mt-1">
-                    Best for complex projects that need detailed requirements. 
-                    You&apos;ll answer a few questions to define scope, goals, and constraints 
-                    before work begins. Skip this for quick, straightforward tasks.
-                  </p>
-                </div>
-              </label>
-            </div>
-          )}
-
-          {/* Assigned Agent */}
-          <div>
-            <label className="block text-sm font-medium mb-1">Assign to</label>
-            <select
-              value={form.assigned_agent_id}
-              onChange={(e) => {
-                if (e.target.value === '__add_new__') {
-                  setShowAgentModal(true);
-                } else {
-                  setForm({ ...form, assigned_agent_id: e.target.value });
-                }
-              }}
-              className="w-full min-h-11 bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
-            >
-              <option value="">Unassigned</option>
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.avatar_emoji} {agent.name} - {agent.role}
-                </option>
-              ))}
-              <option value="__add_new__" className="text-mc-accent">
-                ➕ Add new agent...
-              </option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Priority */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Priority</label>
-              <select
-                value={form.priority}
-                onChange={(e) => setForm({ ...form, priority: e.target.value as TaskPriority })}
-                className="w-full min-h-11 bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
-              >
-                {priorities.map((p) => (
-                  <option key={p} value={p}>
-                    {p.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Due Date */}
-            <div>
-              <label className="block text-sm font-medium mb-1">Due Date</label>
-              <input
-                type="datetime-local"
-                value={form.due_date}
-                onChange={(e) => setForm({ ...form, due_date: e.target.value })}
-                className="w-full min-h-11 bg-mc-bg border border-mc-border rounded px-3 py-2 text-sm focus:outline-none focus:border-mc-accent"
-              />
-            </div>
-          </div>
-
-          {/* Pull Request section */}
-          {task?.pr_url && (
-            <div className="p-3 bg-mc-bg rounded-lg border border-mc-border">
-              <h4 className="text-sm font-medium text-mc-text mb-2 flex items-center gap-2">
-                <ExternalLink className="w-4 h-4" />
-                Pull Request
-              </h4>
-              <div className="flex items-center gap-3">
-                <a
-                  href={task.pr_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-mc-accent hover:underline break-all"
-                >
-                  {task.pr_url}
-                </a>
-                {task.pr_status && (
-                  <span className={`shrink-0 text-xs px-2 py-1 rounded font-medium ${
-                    task.pr_status === 'open' ? 'bg-blue-500/20 text-blue-400' :
-                    task.pr_status === 'merged' ? 'bg-green-500/20 text-green-400' :
-                    task.pr_status === 'closed' ? 'bg-red-500/20 text-red-400' :
-                    'bg-gray-500/20 text-gray-400'
-                  }`}>
-                    {task.pr_status}
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {saveError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-md">
-              <span className="text-sm text-red-400">{saveError}</span>
-            </div>
-          )}
-            </form>
           )}
 
           {/* Planning Tab */}

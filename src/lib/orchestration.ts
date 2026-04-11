@@ -16,6 +16,10 @@ import { getMissionControlUrl } from './config';
 
 const MISSION_CONTROL_URL = getMissionControlUrl();
 
+function logOrchestrationFailure(message: string, context: Record<string, unknown>): void {
+  logger.error(context, message);
+}
+
 export interface LogActivityParams {
   taskId: string;
   activityType: 'spawned' | 'updated' | 'completed' | 'file_created' | 'status_changed';
@@ -57,12 +61,22 @@ export async function logActivity(params: LogActivityParams): Promise<void> {
 
     if (!response.ok) {
       const error = await response.text();
-      logger.error(`Failed to log activity: ${error}`);
+      logOrchestrationFailure('Failed to log activity', {
+        taskId: params.taskId,
+        endpoint: `${MISSION_CONTROL_URL}/api/tasks/${params.taskId}/activities`,
+        status: response.status,
+        response: error,
+        activityType: params.activityType,
+      });
     } else {
       logger.info(`✓ Activity logged: ${params.message}`);
     }
   } catch (error) {
-    logger.error('Error logging activity:', error);
+    logOrchestrationFailure('Error logging activity', {
+      taskId: params.taskId,
+      endpoint: `${MISSION_CONTROL_URL}/api/tasks/${params.taskId}/activities`,
+      error,
+    });
   }
 }
 
@@ -85,12 +99,23 @@ export async function logDeliverable(params: LogDeliverableParams): Promise<void
 
     if (!response.ok) {
       const error = await response.text();
-      logger.error(`Failed to log deliverable: ${error}`);
+      logOrchestrationFailure('Failed to log deliverable', {
+        taskId: params.taskId,
+        endpoint: `${MISSION_CONTROL_URL}/api/tasks/${params.taskId}/deliverables`,
+        status: response.status,
+        response: error,
+        deliverableType: params.deliverableType,
+        title: params.title,
+      });
     } else {
       logger.info(`✓ Deliverable logged: ${params.title}`);
     }
   } catch (error) {
-    logger.error('Error logging deliverable:', error);
+    logOrchestrationFailure('Error logging deliverable', {
+      taskId: params.taskId,
+      endpoint: `${MISSION_CONTROL_URL}/api/tasks/${params.taskId}/deliverables`,
+      error,
+    });
   }
 }
 
@@ -111,12 +136,22 @@ export async function registerSubAgentSession(params: RegisterSubAgentParams): P
 
     if (!response.ok) {
       const error = await response.text();
-      logger.error(`Failed to register sub-agent session: ${error}`);
+      logOrchestrationFailure('Failed to register sub-agent session', {
+        taskId: params.taskId,
+        endpoint: `${MISSION_CONTROL_URL}/api/tasks/${params.taskId}/subagent`,
+        status: response.status,
+        response: error,
+        sessionId: params.sessionId,
+      });
     } else {
       logger.info(`✓ Sub-agent session registered: ${params.sessionId}`);
     }
   } catch (error) {
-    logger.error('Error registering sub-agent session:', error);
+    logOrchestrationFailure('Error registering sub-agent session', {
+      taskId: params.taskId,
+      endpoint: `${MISSION_CONTROL_URL}/api/tasks/${params.taskId}/subagent`,
+      error,
+    });
   }
 }
 
@@ -137,27 +172,43 @@ export async function completeSubAgentSession(sessionId: string, summary?: strin
 
     if (!response.ok) {
       const error = await response.text();
-      logger.error(`Failed to complete sub-agent session: ${error}`);
+      logOrchestrationFailure('Failed to complete sub-agent session', {
+        endpoint: `${MISSION_CONTROL_URL}/api/openclaw/sessions/${sessionId}`,
+        status: response.status,
+        response: error,
+        sessionId,
+        summary,
+      });
     } else {
-      logger.info(`✓ Sub-agent session completed: ${sessionId}`);
+      logger.info(`✓ Sub-agent session completed: ${sessionId}${summary ? ` (${summary})` : ''}`);
     }
   } catch (error) {
-    logger.error('Error completing sub-agent session:', error);
+    logOrchestrationFailure('Error completing sub-agent session', {
+      endpoint: `${MISSION_CONTROL_URL}/api/openclaw/sessions/${sessionId}`,
+      error,
+      sessionId,
+      summary,
+    });
   }
 }
 
 /**
  * Get deliverables for a task (for review verification)
  */
-export async function getDeliverables(taskId: string): Promise<any[]> {
+export async function getDeliverables(taskId: string): Promise<unknown[]> {
   try {
-    const response = await fetch(`${MISSION_CONTROL_URL}/api/tasks/${taskId}/deliverables`);
+    const endpoint = `${MISSION_CONTROL_URL}/api/tasks/${taskId}/deliverables`;
+    const response = await fetch(endpoint);
     if (!response.ok) {
       throw new Error(`Failed to fetch deliverables: ${response.statusText}`);
     }
     return await response.json();
   } catch (error) {
-    logger.error('Error fetching deliverables:', error);
+    logOrchestrationFailure('Error fetching deliverables', {
+      taskId,
+      endpoint: `${MISSION_CONTROL_URL}/api/tasks/${taskId}/deliverables`,
+      error,
+    });
     return [];
   }
 }

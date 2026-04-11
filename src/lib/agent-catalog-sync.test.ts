@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { queryOne, run } from './db';
 import { OpenClawClient } from './openclaw/client';
-import { syncGatewayAgentsToCatalog } from './agent-catalog-sync';
+import { getAgentByPreferredRoles, syncGatewayAgentsToCatalog } from './agent-catalog-sync';
 
 test('agent catalog sync preserves locally curated non-default roles', async () => {
   const originalIsConnected = OpenClawClient.prototype.isConnected;
@@ -127,4 +127,58 @@ test('agent catalog sync preserves locally curated non-default roles', async () 
       insertGatewayId,
     ]);
   }
+});
+
+test('agent catalog sync short-circuits in test mode when not forced', async () => {
+  const changed = await syncGatewayAgentsToCatalog();
+  assert.equal(changed, 0);
+});
+
+test('getAgentByPreferredRoles prefers task roles before global fallback', () => {
+  const taskId = crypto.randomUUID();
+  const roleAgentId = crypto.randomUUID();
+  const fallbackAgentId = crypto.randomUUID();
+  const role = 'qa';
+  const taskRole = 'task-qa';
+
+  run(
+    `INSERT OR IGNORE INTO workspaces (id, name, slug)
+     VALUES ('default', 'Default', 'default')`
+  );
+
+  run(
+    `INSERT INTO tasks (id, title, status, priority, workspace_id, business_id, created_at, updated_at)
+     VALUES (?, 'Role lookup', 'inbox', 'normal', 'default', 'default', datetime('now'), datetime('now'))`,
+    [taskId]
+  );
+  run(
+    `INSERT INTO agents (id, name, role, avatar_emoji, status, is_master, workspace_id, source, created_at, updated_at)
+     VALUES (?, 'Task QA', ?, '🤖', 'working', 0, 'default', 'local', datetime('now'), datetime('now'))`,
+    [roleAgentId, taskRole]
+  );
+  run(
+    `INSERT INTO agents (id, name, role, avatar_emoji, status, is_master, workspace_id, source, created_at, updated_at)
+     VALUES (?, 'Global QA', ?, '🤖', 'working', 0, 'default', 'local', datetime('now'), datetime('now'))`,
+    [fallbackAgentId, role]
+  );
+  run(
+    `INSERT INTO task_roles (id, task_id, role, agent_id, created_at)
+     VALUES (lower(hex(randomblob(16))), ?, ?, ?, datetime('now'))`,
+    [taskId, role, roleAgentId]
+  );
+
+  assert.deepEqual(getAgentByPreferredRoles(taskId, [role]), {
+    id: roleAgentId,
+    name: 'Task QA',
+  });
+
+  run('DELETE FROM task_roles WHERE task_id = ?', [taskId]);
+  assert.deepEqual(getAgentByPreferredRoles(taskId, [role]), {
+    id: fallbackAgentId,
+    name: 'Global QA',
+  });
+
+  run('DELETE FROM task_roles WHERE task_id = ?', [taskId]);
+  run('DELETE FROM agents WHERE id IN (?, ?)', [roleAgentId, fallbackAgentId]);
+  run('DELETE FROM tasks WHERE id = ?', [taskId]);
 });

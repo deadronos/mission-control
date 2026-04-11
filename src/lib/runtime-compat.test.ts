@@ -5,6 +5,8 @@ import os from 'os';
 import path from 'path';
 import {
   getApiToken,
+  enableDebugInStorage,
+  disableDebugInStorage,
   isDebugEnabledInStorage,
   PRIMARY_DEBUG_STORAGE_KEY,
   LEGACY_DEBUG_STORAGE_KEY,
@@ -38,6 +40,39 @@ test('isDebugEnabledInStorage supports Mission Control and legacy Autensa keys',
   storage.values.delete(PRIMARY_DEBUG_STORAGE_KEY);
   storage.values.set(LEGACY_DEBUG_STORAGE_KEY, 'true');
   assert.equal(isDebugEnabledInStorage(storage), true);
+});
+
+test('enableDebugInStorage writes the primary key and removes the legacy key', () => {
+  const writes: Array<[string, string | null, 'set' | 'remove']> = [];
+  const storage = {
+    setItem(key: string, value: string) {
+      writes.push([key, value, 'set']);
+    },
+    removeItem(key: string) {
+      writes.push([key, null, 'remove']);
+    },
+  };
+
+  enableDebugInStorage(storage);
+
+  assert.deepEqual(writes, [
+    [PRIMARY_DEBUG_STORAGE_KEY, 'true', 'set'],
+    [LEGACY_DEBUG_STORAGE_KEY, null, 'remove'],
+  ]);
+});
+
+test('disableDebugInStorage removes both debug keys', () => {
+  const removed: string[] = [];
+  const storage = {
+    setItem() {},
+    removeItem(key: string) {
+      removed.push(key);
+    },
+  };
+
+  disableDebugInStorage(storage);
+
+  assert.deepEqual(removed, [PRIMARY_DEBUG_STORAGE_KEY, LEGACY_DEBUG_STORAGE_KEY]);
 });
 
 test('resolveWorkspaceMetadataPath prefers Mission Control filename and falls back to legacy Autensa filename', () => {

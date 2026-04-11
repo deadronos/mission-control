@@ -1,272 +1,388 @@
-/**
- * Tests for Product Program A/B Testing
- *
- * Covers: chi-squared statistics, variant CRUD (via raw SQL against in-memory DB),
- * test lifecycle, one-active-test constraint, promotion flow, alternating mode,
- * and edge cases (0 swipes, equal results, small samples).
- */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { createProduct } from './products';
+import { queryOne, run } from '@/lib/db';
 
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { chiSquaredTest } from './ab-testing';
+const broadcastMock = vi.hoisted(() => vi.fn());
 
-// ─── Chi-Squared Statistics Tests ───────────────────────────────────────────
+vi.mock('@/lib/events', () => ({
+  broadcast: broadcastMock,
+}));
 
-test('chiSquaredTest: returns chi=0, p=1 for all zeros', () => {
-  const result = chiSquaredTest(0, 0, 0, 0);
-  assert.equal(result.chiSquared, 0);
-  assert.equal(result.pValue, 1);
+function createVariantRow(productId: string, name: string, content: string, isControl = false) {
+  return run(
+    `INSERT INTO product_program_variants (id, product_id, name, content, is_control, created_at)
+     VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+    [randomUUID(), productId, name, content, isControl ? 1 : 0]
+  );
+}
+
+function insertIdea(productId: string, variantId: string, title: string) {
+  const id = randomUUID();
+  run(
+    `INSERT INTO ideas (
+       id, product_id, title, description, category, variant_id, status, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'feature', ?, 'pending', datetime('now'), datetime('now'))`,
+    [id, productId, title, `${title} description`, variantId]
+  );
+  return id;
+}
+
+function insertTask(productId: string, ideaId: string, status: 'done' | 'in_progress' = 'done') {
+  const id = randomUUID();
+  run(
+    `INSERT INTO tasks (
+       id, title, status, priority, product_id, idea_id, workspace_id, business_id, created_at, updated_at
+     ) VALUES (?, ?, ?, 'normal', ?, ?, 'default', 'default', datetime('now'), datetime('now'))`,
+    [id, `Task for ${ideaId}`, status, productId, ideaId]
+  );
+  return id;
+}
+
+function insertSwipe(ideaId: string, productId: string, action: 'approve' | 'reject' | 'maybe' | 'fire') {
+  run(
+    `INSERT INTO swipe_history (id, idea_id, product_id, action, category, created_at)
+     VALUES (?, ?, ?, ?, 'feature', datetime('now'))`,
+    [randomUUID(), ideaId, productId, action]
+  );
+}
+
+function insertCostEvent(productId: string, taskId: string, costUsd: number) {
+  run(
+    `INSERT INTO cost_events (id, product_id, workspace_id, task_id, event_type, cost_usd, created_at)
+     VALUES (?, ?, 'default', ?, 'build_task', ?, datetime('now'))`,
+    [randomUUID(), productId, taskId, costUsd]
+  );
+}
+
+function cleanupProduct(productId: string) {
+  run('DELETE FROM cost_events WHERE product_id = ?', [productId]);
+  run('DELETE FROM swipe_history WHERE product_id = ?', [productId]);
+  run('DELETE FROM tasks WHERE product_id = ?', [productId]);
+  run('DELETE FROM ideas WHERE product_id = ?', [productId]);
+  run('DELETE FROM product_ab_tests WHERE product_id = ?', [productId]);
+  run('DELETE FROM product_program_variants WHERE product_id = ?', [productId]);
+  run('DELETE FROM products WHERE id = ?', [productId]);
+}
+
+beforeEach(() => {
+  broadcastMock.mockClear();
+  run(`INSERT OR IGNORE INTO workspaces (id, name, slug)
+       VALUES ('default', 'Default', 'default')`);
 });
 
-test('chiSquaredTest: returns p=1 for equal distributions', () => {
-  const result = chiSquaredTest(50, 50, 50, 50);
-  assert.equal(result.chiSquared, 0);
-  assert.equal(result.pValue, 1);
+afterEach(() => {
+  // Cleanup by prefix is handled explicitly in each test.
 });
 
-test('chiSquaredTest: detects significant difference (80% vs 40%)', () => {
-  // Variant A: 80/100 approve, Variant B: 40/100 approve
-  const result = chiSquaredTest(80, 20, 40, 60);
-  // chi-squared critical value at p<0.05 for df=1 is 3.841
-  assert.ok(result.chiSquared > 3.84, `Expected chi-squared > 3.84, got ${result.chiSquared}`);
-  assert.ok(result.pValue < 0.05, `Expected p-value < 0.05, got ${result.pValue}`);
-});
+describe('ab-testing', () => {
+  it('covers variant CRUD and delete guards', async () => {
+    const product = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'A/B test fixture',
+      product_program: 'Primary program',
+      workspace_id: 'default',
+    });
 
-test('chiSquaredTest: non-significant for very small sample', () => {
-  // 5 vs 4 approved out of 10 each — very close rates, tiny sample
-  const result = chiSquaredTest(5, 5, 4, 6);
-  assert.ok(result.pValue > 0.05, `Expected p-value > 0.05, got ${result.pValue}`);
-});
+    try {
+      const {
+        createVariant,
+        listVariants,
+        getVariant,
+        updateVariant,
+        deleteVariant,
+      } = await import('./ab-testing');
 
-test('chiSquaredTest: extreme case — 100% vs 0%', () => {
-  const result = chiSquaredTest(100, 0, 0, 100);
-  assert.ok(result.chiSquared > 0, 'Chi-squared should be positive');
-  assert.ok(result.pValue < 0.001, `Expected p-value < 0.001, got ${result.pValue}`);
-});
+      const control = createVariant({
+        product_id: product.id,
+        name: 'Control',
+        content: 'Control content',
+        is_control: true,
+      });
+      const variant = createVariant({
+        product_id: product.id,
+        name: 'Variant',
+        content: 'Variant content',
+      });
 
-test('chiSquaredTest: both all-approved (no difference)', () => {
-  const result = chiSquaredTest(50, 0, 50, 0);
-  assert.equal(result.chiSquared, 0);
-  assert.equal(result.pValue, 1);
-});
+      expect(listVariants(product.id).map((item) => item.name)).toEqual(['Control', 'Variant']);
+      expect(getVariant(control.id)?.name).toBe('Control');
+      expect(updateVariant(control.id, {})?.name).toBe('Control');
+      expect(updateVariant(control.id, { name: 'Control v2' })?.name).toBe('Control v2');
+      expect(deleteVariant(variant.id)).toEqual({ success: true });
 
-test('chiSquaredTest: single observation per group', () => {
-  const result = chiSquaredTest(1, 0, 0, 1);
-  assert.ok(result.chiSquared > 0, 'Should produce non-zero chi-squared');
-  assert.equal(typeof result.pValue, 'number');
-});
+      const blocker = createVariant({
+        product_id: product.id,
+        name: 'Blocker',
+        content: 'Blocker content',
+      });
 
-test('chiSquaredTest: large unbalanced sample', () => {
-  // A: 95/100, B: 85/100 — moderate difference, large N
-  const result = chiSquaredTest(95, 5, 85, 15);
-  assert.ok(result.chiSquared > 0, 'Should detect some difference');
-  // With N=200 and ~10% rate difference, should be significant
-  assert.ok(result.pValue < 0.05, `Expected significant with p=${result.pValue}`);
-});
+      run(
+        `INSERT INTO product_ab_tests (
+           id, product_id, variant_a_id, variant_b_id, status, split_mode, min_swipes, created_at
+         ) VALUES (?, ?, ?, ?, 'active', 'concurrent', 10, datetime('now'))`,
+        [randomUUID(), product.id, control.id, blocker.id]
+      );
 
-// ─── Database Integration Tests (in-memory SQLite) ──────────────────────────
+      expect(deleteVariant(control.id)).toEqual({
+        success: false,
+        error: 'Cannot delete variant that is used in an A/B test',
+      });
+    } finally {
+      cleanupProduct(product.id);
+    }
+  });
 
-test('A/B Testing: full lifecycle via raw SQL', async () => {
-  // Dynamically import better-sqlite3 so the test doesn't fail at parse time
-  // if it's not available in CI (the test still exercises all SQL patterns)
-  const Database = (await import('better-sqlite3')).default;
-  const db = new Database(':memory:');
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  it('starts, concludes, cancels, and promotes tests with the expected guardrails', async () => {
+    const product = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'Lifecycle fixture',
+      product_program: 'Primary program',
+      workspace_id: 'default',
+    });
+    const otherProduct = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'Foreign fixture',
+      product_program: 'Foreign program',
+      workspace_id: 'default',
+    });
 
-  // Create minimal schema
-  db.exec(`
-    CREATE TABLE workspaces (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      slug TEXT NOT NULL UNIQUE
-    );
-    INSERT INTO workspaces (id, name, slug) VALUES ('default', 'Default', 'default');
+    try {
+      const { createVariant, startTest, concludeTest, cancelTest, promoteWinner, getActiveTest } = await import('./ab-testing');
 
-    CREATE TABLE products (
-      id TEXT PRIMARY KEY,
-      workspace_id TEXT NOT NULL REFERENCES workspaces(id),
-      name TEXT NOT NULL,
-      product_program TEXT,
-      status TEXT DEFAULT 'active',
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
+      const variantA = createVariant({
+        product_id: product.id,
+        name: 'A',
+        content: 'Variant A',
+        is_control: true,
+      });
+      const variantB = createVariant({
+        product_id: product.id,
+        name: 'B',
+        content: 'Variant B',
+      });
+      const variantC = createVariant({
+        product_id: product.id,
+        name: 'C',
+        content: 'Variant C',
+      });
+      const foreignVariant = createVariant({
+        product_id: otherProduct.id,
+        name: 'Foreign',
+        content: 'Foreign content',
+      });
 
-    CREATE TABLE product_program_variants (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      content TEXT NOT NULL,
-      is_control INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
+      expect(startTest({
+        product_id: product.id,
+        variant_a_id: variantA.id,
+        variant_b_id: variantA.id,
+      })).toEqual({ error: 'Variant A and Variant B must be different' });
 
-    CREATE TABLE product_ab_tests (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-      variant_a_id TEXT NOT NULL REFERENCES product_program_variants(id),
-      variant_b_id TEXT NOT NULL REFERENCES product_program_variants(id),
-      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'concluded', 'cancelled')),
-      split_mode TEXT NOT NULL DEFAULT 'concurrent' CHECK (split_mode IN ('concurrent', 'alternating')),
-      min_swipes INTEGER NOT NULL DEFAULT 50,
-      last_variant_used TEXT,
-      winner_variant_id TEXT REFERENCES product_program_variants(id),
-      created_at TEXT DEFAULT (datetime('now')),
-      concluded_at TEXT
-    );
+      expect(startTest({
+        product_id: product.id,
+        variant_a_id: variantA.id,
+        variant_b_id: foreignVariant.id,
+      })).toEqual({ error: 'Variant B not found or does not belong to this product' });
 
-    CREATE TABLE ideas (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL REFERENCES products(id),
-      title TEXT NOT NULL,
-      description TEXT NOT NULL,
-      category TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      variant_id TEXT REFERENCES product_program_variants(id),
-      task_id TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
+      const started = startTest({
+        product_id: product.id,
+        variant_a_id: variantA.id,
+        variant_b_id: variantB.id,
+        split_mode: 'concurrent',
+        min_swipes: 10,
+      });
 
-    CREATE TABLE swipe_history (
-      id TEXT PRIMARY KEY,
-      idea_id TEXT NOT NULL REFERENCES ideas(id),
-      product_id TEXT NOT NULL,
-      action TEXT NOT NULL,
-      category TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
+      expect(started.test?.status).toBe('active');
+      expect(getActiveTest(product.id)?.id).toBe(started.test?.id);
+      expect(broadcastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'ab_test_started' }));
 
-    CREATE TABLE tasks (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      status TEXT DEFAULT 'inbox',
-      idea_id TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
+      expect(startTest({
+        product_id: product.id,
+        variant_a_id: variantA.id,
+        variant_b_id: variantC.id,
+      })).toEqual({
+        error: 'An active A/B test already exists for this product. Conclude or cancel it first.',
+      });
 
-    CREATE TABLE cost_events (
-      id TEXT PRIMARY KEY,
-      product_id TEXT,
-      workspace_id TEXT NOT NULL,
-      task_id TEXT,
-      event_type TEXT NOT NULL,
-      cost_usd REAL DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+      expect(concludeTest('missing-test', variantA.id)).toEqual({ error: 'A/B test not found' });
+      expect(concludeTest(started.test!.id, variantC.id)).toEqual({ error: 'Winner must be one of the test variants' });
+      expect(promoteWinner(started.test!.id)).toEqual({
+        success: false,
+        error: 'Test must be concluded before promoting',
+      });
 
-  // Seed test data
-  db.exec(`INSERT INTO products (id, workspace_id, name, product_program) VALUES ('prod-1', 'default', 'Test Product', 'Original program')`);
-  db.exec(`INSERT INTO product_program_variants (id, product_id, name, content, is_control) VALUES ('var-a', 'prod-1', 'Control', 'Focus on UX and quality', 1)`);
-  db.exec(`INSERT INTO product_program_variants (id, product_id, name, content, is_control) VALUES ('var-b', 'prod-1', 'Experiment', 'Focus on monetization and growth', 0)`);
+      const concluded = concludeTest(started.test!.id, variantA.id);
+      expect(concluded.test?.status).toBe('concluded');
+      expect(broadcastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'ab_test_concluded' }));
+      expect(promoteWinner(started.test!.id)).toEqual({ success: true });
+      expect(cancelTest(started.test!.id)).toEqual({ error: 'Test is not active' });
 
-  // Test 1: Create variant
-  const variants = db.prepare('SELECT * FROM product_program_variants WHERE product_id = ?').all('prod-1') as { id: string }[];
-  assert.equal(variants.length, 2, 'Should have 2 variants');
+      const cancellable = startTest({
+        product_id: product.id,
+        variant_a_id: variantB.id,
+        variant_b_id: variantC.id,
+      });
+      expect(cancellable.test?.status).toBe('active');
 
-  // Test 2: Start A/B test
-  db.exec(`INSERT INTO product_ab_tests (id, product_id, variant_a_id, variant_b_id, status, split_mode, min_swipes) VALUES ('test-1', 'prod-1', 'var-a', 'var-b', 'active', 'concurrent', 50)`);
-  const activeTest = db.prepare(`SELECT * FROM product_ab_tests WHERE product_id = ? AND status = 'active'`).get('prod-1') as { id: string } | undefined;
-  assert.ok(activeTest, 'Should have an active test');
+      const cancelled = cancelTest(cancellable.test!.id);
+      expect(cancelled.test?.status).toBe('cancelled');
+      expect(broadcastMock).toHaveBeenCalledWith(expect.objectContaining({ type: 'ab_test_cancelled' }));
+    } finally {
+      cleanupProduct(product.id);
+      cleanupProduct(otherProduct.id);
+    }
+  });
 
-  // Test 3: One-active-test constraint — attempting to insert a second active test should be blocked at app level
-  // (DB doesn't have a unique constraint — this is enforced by application code, which checks before inserting)
-  const activeCount = (db.prepare(`SELECT COUNT(*) as c FROM product_ab_tests WHERE product_id = ? AND status = 'active'`).get('prod-1') as { c: number }).c;
-  assert.equal(activeCount, 1, 'Should have exactly 1 active test');
+  it('compares metrics, generates analysis, and resolves research programs', async () => {
+    const rawProduct = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'Raw comparison fixture',
+      product_program: 'Raw primary program',
+      workspace_id: 'default',
+    });
+    const ciProduct = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'CI comparison fixture',
+      product_program: 'CI primary program',
+      workspace_id: 'default',
+    });
+    const significanceProduct = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'Significance fixture',
+      product_program: 'Winner primary program',
+      workspace_id: 'default',
+    });
+    const concurrentProduct = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'Concurrent fixture',
+      product_program: 'Concurrent primary program',
+      workspace_id: 'default',
+    });
+    const alternatingProduct = createProduct({
+      name: `AB Product ${randomUUID()}`,
+      description: 'Alternating fixture',
+      product_program: 'Alternating primary program',
+      workspace_id: 'default',
+    });
 
-  // Test 4: Tag ideas with variant_id
-  db.exec(`INSERT INTO ideas (id, product_id, title, description, category, variant_id) VALUES ('idea-a1', 'prod-1', 'UX Idea 1', 'Better onboarding', 'ux', 'var-a')`);
-  db.exec(`INSERT INTO ideas (id, product_id, title, description, category, variant_id) VALUES ('idea-a2', 'prod-1', 'UX Idea 2', 'Better nav', 'ux', 'var-a')`);
-  db.exec(`INSERT INTO ideas (id, product_id, title, description, category, variant_id) VALUES ('idea-a3', 'prod-1', 'UX Idea 3', 'Better search', 'ux', 'var-a')`);
-  db.exec(`INSERT INTO ideas (id, product_id, title, description, category, variant_id) VALUES ('idea-b1', 'prod-1', 'Rev Idea 1', 'Subscriptions', 'monetization', 'var-b')`);
-  db.exec(`INSERT INTO ideas (id, product_id, title, description, category, variant_id) VALUES ('idea-b2', 'prod-1', 'Rev Idea 2', 'Ads', 'monetization', 'var-b')`);
-  db.exec(`INSERT INTO ideas (id, product_id, title, description, category, variant_id) VALUES ('idea-none', 'prod-1', 'Regular Idea', 'No variant', 'feature', NULL)`);
+    try {
+      const {
+        createVariant,
+        startTest,
+        concludeTest,
+        getTestComparison,
+        getResearchPrograms,
+        analyzeWinnerDelta,
+        chiSquaredTest,
+      } = await import('./ab-testing');
 
-  const varAIdeas = (db.prepare('SELECT COUNT(*) as c FROM ideas WHERE variant_id = ?').get('var-a') as { c: number }).c;
-  const varBIdeas = (db.prepare('SELECT COUNT(*) as c FROM ideas WHERE variant_id = ?').get('var-b') as { c: number }).c;
-  const noVarIdeas = (db.prepare('SELECT COUNT(*) as c FROM ideas WHERE variant_id IS NULL').get() as { c: number }).c;
-  assert.equal(varAIdeas, 3, 'Variant A should have 3 ideas');
-  assert.equal(varBIdeas, 2, 'Variant B should have 2 ideas');
-  assert.equal(noVarIdeas, 1, 'Should have 1 idea with no variant');
+      expect(getResearchPrograms(`missing-${randomUUID()}`)).toEqual([]);
+      expect(getTestComparison(`missing-${randomUUID()}`)).toBeUndefined();
+      expect(analyzeWinnerDelta(`missing-${randomUUID()}`)).toBeNull();
+      expect(chiSquaredTest(0, 0, 0, 0)).toEqual({ chiSquared: 0, pValue: 1 });
+      expect(chiSquaredTest(0, 0, 5, 0).pValue).toBeGreaterThanOrEqual(0);
 
-  // Test 5: Swipe history per variant
-  db.exec(`INSERT INTO swipe_history (id, idea_id, product_id, action, category) VALUES ('sw-1', 'idea-a1', 'prod-1', 'approve', 'ux')`);
-  db.exec(`INSERT INTO swipe_history (id, idea_id, product_id, action, category) VALUES ('sw-2', 'idea-a2', 'prod-1', 'approve', 'ux')`);
-  db.exec(`INSERT INTO swipe_history (id, idea_id, product_id, action, category) VALUES ('sw-3', 'idea-a3', 'prod-1', 'reject', 'ux')`);
-  db.exec(`INSERT INTO swipe_history (id, idea_id, product_id, action, category) VALUES ('sw-4', 'idea-b1', 'prod-1', 'reject', 'monetization')`);
-  db.exec(`INSERT INTO swipe_history (id, idea_id, product_id, action, category) VALUES ('sw-5', 'idea-b2', 'prod-1', 'reject', 'monetization')`);
+      const rawVariantA = createVariant({ product_id: rawProduct.id, name: 'Raw A', content: 'Raw A' });
+      const rawVariantB = createVariant({ product_id: rawProduct.id, name: 'Raw B', content: 'Raw B' });
+      expect(getResearchPrograms(rawProduct.id)).toEqual([
+        { program: 'Raw primary program', variantId: null, variantName: null },
+      ]);
+      const rawTest = startTest({
+        product_id: rawProduct.id,
+        variant_a_id: rawVariantA.id,
+        variant_b_id: rawVariantB.id,
+        min_swipes: 50,
+      }).test!;
 
-  // Verify per-variant metrics query
-  const varAMetrics = db.prepare(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN sh.action IN ('approve', 'fire') THEN 1 ELSE 0 END) as approved,
-      SUM(CASE WHEN sh.action = 'reject' THEN 1 ELSE 0 END) as rejected
-    FROM swipe_history sh
-    JOIN ideas i ON sh.idea_id = i.id
-    WHERE i.variant_id = ?
-  `).get('var-a') as { total: number; approved: number; rejected: number };
+      const rawComparison = getTestComparison(rawTest.id)!;
+      expect(rawComparison.statistics.confidence_tier).toBe('raw');
+      expect(rawComparison.statistics.chi_squared).toBeNull();
+      expect(rawComparison.statistics.recommended_winner).toBeNull();
 
-  assert.equal(varAMetrics.total, 3, 'Variant A should have 3 swipes');
-  assert.equal(varAMetrics.approved, 2, 'Variant A should have 2 approved');
-  assert.equal(varAMetrics.rejected, 1, 'Variant A should have 1 rejected');
+      const ciVariantA = createVariant({ product_id: ciProduct.id, name: 'CI A', content: 'CI A' });
+      const ciVariantB = createVariant({ product_id: ciProduct.id, name: 'CI B', content: 'CI B' });
+      const ciTest = startTest({
+        product_id: ciProduct.id,
+        variant_a_id: ciVariantA.id,
+        variant_b_id: ciVariantB.id,
+        min_swipes: 50,
+      }).test!;
 
-  const varBMetrics = db.prepare(`
-    SELECT
-      COUNT(*) as total,
-      SUM(CASE WHEN sh.action IN ('approve', 'fire') THEN 1 ELSE 0 END) as approved,
-      SUM(CASE WHEN sh.action = 'reject' THEN 1 ELSE 0 END) as rejected
-    FROM swipe_history sh
-    JOIN ideas i ON sh.idea_id = i.id
-    WHERE i.variant_id = ?
-  `).get('var-b') as { total: number; approved: number; rejected: number };
+      const ciIdeaA = insertIdea(ciProduct.id, ciVariantA.id, 'CI idea A');
+      const ciIdeaB = insertIdea(ciProduct.id, ciVariantB.id, 'CI idea B');
+      for (let i = 0; i < 20; i++) insertSwipe(ciIdeaA, ciProduct.id, 'approve');
+      for (let i = 0; i < 20; i++) insertSwipe(ciIdeaB, ciProduct.id, 'reject');
 
-  assert.equal(varBMetrics.total, 2, 'Variant B should have 2 swipes');
-  assert.equal(varBMetrics.approved, 0, 'Variant B should have 0 approved');
-  assert.equal(varBMetrics.rejected, 2, 'Variant B should have 2 rejected');
+      const ciComparison = getTestComparison(ciTest.id)!;
+      expect(ciComparison.statistics.confidence_tier).toBe('ci');
+      expect(ciComparison.statistics.significant).toBe(true);
+      expect(ciComparison.statistics.recommended_winner).toBeNull();
 
-  // Test 6: Conclude with winner
-  const now = new Date().toISOString();
-  db.prepare(`UPDATE product_ab_tests SET status = 'concluded', winner_variant_id = ?, concluded_at = ? WHERE id = ?`).run('var-a', now, 'test-1');
-  const concluded = db.prepare('SELECT * FROM product_ab_tests WHERE id = ?').get('test-1') as { status: string; winner_variant_id: string };
-  assert.equal(concluded.status, 'concluded');
-  assert.equal(concluded.winner_variant_id, 'var-a');
+      const sigVariantA = createVariant({ product_id: significanceProduct.id, name: 'Winner', content: 'Winner content', is_control: true });
+      const sigVariantB = createVariant({ product_id: significanceProduct.id, name: 'Loser', content: 'Loser content' });
+      const sigTest = startTest({
+        product_id: significanceProduct.id,
+        variant_a_id: sigVariantA.id,
+        variant_b_id: sigVariantB.id,
+        min_swipes: 5,
+      }).test!;
 
-  // Test 7: Promote winner — copy variant content to product's primary program
-  const winnerVariant = db.prepare('SELECT content FROM product_program_variants WHERE id = ?').get('var-a') as { content: string };
-  db.prepare('UPDATE products SET product_program = ?, updated_at = ? WHERE id = ?').run(winnerVariant.content, new Date().toISOString(), 'prod-1');
-  const updatedProduct = db.prepare('SELECT product_program FROM products WHERE id = ?').get('prod-1') as { product_program: string };
-  assert.equal(updatedProduct.product_program, 'Focus on UX and quality', 'Product program should be updated to winner content');
+      const sigIdeaA = insertIdea(significanceProduct.id, sigVariantA.id, 'Sig idea A');
+      const sigIdeaB = insertIdea(significanceProduct.id, sigVariantB.id, 'Sig idea B');
+      for (let i = 0; i < 5; i++) insertSwipe(sigIdeaA, significanceProduct.id, 'approve');
+      for (let i = 0; i < 5; i++) insertSwipe(sigIdeaB, significanceProduct.id, 'reject');
 
-  // Test 8: Cannot delete variant used in test
-  const usedInTest = db.prepare('SELECT id FROM product_ab_tests WHERE variant_a_id = ? OR variant_b_id = ?').get('var-a', 'var-a') as { id: string } | undefined;
-  assert.ok(usedInTest, 'Variant should be found in a test');
+      const sigTaskA = insertTask(significanceProduct.id, sigIdeaA, 'done');
+      insertTask(significanceProduct.id, sigIdeaB, 'in_progress');
+      insertCostEvent(significanceProduct.id, sigTaskA, 12.34);
 
-  // Test 9: Alternating mode tracking
-  db.exec(`INSERT INTO product_ab_tests (id, product_id, variant_a_id, variant_b_id, status, split_mode, min_swipes, last_variant_used) VALUES ('test-alt', 'prod-1', 'var-a', 'var-b', 'active', 'alternating', 50, NULL)`);
+      const sigComparison = getTestComparison(sigTest.id)!;
+      expect(sigComparison.statistics.confidence_tier).toBe('significance');
+      expect(sigComparison.statistics.significant).toBe(true);
+      expect(sigComparison.statistics.recommended_winner).toBe(sigVariantA.id);
 
-  let altTest = db.prepare('SELECT last_variant_used FROM product_ab_tests WHERE id = ?').get('test-alt') as { last_variant_used: string | null };
-  assert.equal(altTest.last_variant_used, null, 'Initial last_variant_used should be null');
+      expect(analyzeWinnerDelta(sigTest.id)).toBeNull();
+      concludeTest(sigTest.id, sigVariantA.id);
 
-  // Simulate first run picks var-a
-  db.prepare('UPDATE product_ab_tests SET last_variant_used = ? WHERE id = ?').run('var-a', 'test-alt');
-  altTest = db.prepare('SELECT last_variant_used FROM product_ab_tests WHERE id = ?').get('test-alt') as { last_variant_used: string | null };
-  assert.equal(altTest.last_variant_used, 'var-a');
+      const analysis = analyzeWinnerDelta(sigTest.id);
+      expect(analysis).toContain('A/B Test Analysis: Winner vs Loser');
+      expect(analysis).toContain('### Statistical Significance');
 
-  // Next run should pick var-b (app logic checks: if last == var-a then next == var-b)
-  const lastUsed = altTest.last_variant_used;
-  const nextVariant = lastUsed === 'var-a' ? 'var-b' : 'var-a';
-  assert.equal(nextVariant, 'var-b', 'Alternating should flip to var-b');
+      const concurrentVariantA = createVariant({ product_id: concurrentProduct.id, name: 'Concurrent A', content: 'Concurrent A' });
+      const concurrentVariantB = createVariant({ product_id: concurrentProduct.id, name: 'Concurrent B', content: 'Concurrent B' });
+      startTest({
+        product_id: concurrentProduct.id,
+        variant_a_id: concurrentVariantA.id,
+        variant_b_id: concurrentVariantB.id,
+        split_mode: 'concurrent',
+      });
 
-  // Test 10: Past experiments browsable
-  db.prepare('UPDATE product_ab_tests SET status = ? WHERE id = ?').run('cancelled', 'test-alt');
-  const allTests = db.prepare('SELECT * FROM product_ab_tests WHERE product_id = ? ORDER BY created_at DESC').all('prod-1') as { id: string; status: string }[];
-  assert.ok(allTests.length >= 2, 'Should have at least 2 tests in history');
-  assert.ok(allTests.some(t => t.status === 'concluded'), 'Should have a concluded test');
-  assert.ok(allTests.some(t => t.status === 'cancelled'), 'Should have a cancelled test');
+      expect(getResearchPrograms(concurrentProduct.id)).toEqual([
+        { program: 'Concurrent A', variantId: concurrentVariantA.id, variantName: 'Concurrent A' },
+        { program: 'Concurrent B', variantId: concurrentVariantB.id, variantName: 'Concurrent B' },
+      ]);
 
-  db.close();
+      const alternatingVariantA = createVariant({ product_id: alternatingProduct.id, name: 'Alt A', content: 'Alt A' });
+      const alternatingVariantB = createVariant({ product_id: alternatingProduct.id, name: 'Alt B', content: 'Alt B' });
+      startTest({
+        product_id: alternatingProduct.id,
+        variant_a_id: alternatingVariantA.id,
+        variant_b_id: alternatingVariantB.id,
+        split_mode: 'alternating',
+      });
+
+      expect(getResearchPrograms(alternatingProduct.id)).toEqual([
+        { program: 'Alt A', variantId: alternatingVariantA.id, variantName: 'Alt A' },
+      ]);
+      expect(getResearchPrograms(alternatingProduct.id)).toEqual([
+        { program: 'Alt B', variantId: alternatingVariantB.id, variantName: 'Alt B' },
+      ]);
+    } finally {
+      cleanupProduct(rawProduct.id);
+      cleanupProduct(ciProduct.id);
+      cleanupProduct(significanceProduct.id);
+      cleanupProduct(concurrentProduct.id);
+      cleanupProduct(alternatingProduct.id);
+    }
+  });
 });

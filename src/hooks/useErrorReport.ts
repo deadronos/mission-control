@@ -46,6 +46,9 @@ function formatErrorTitle(type: string): string {
     dispatch_failed: 'Task dispatch failed',
     planning_failed: 'Planning failed',
     build_failed: 'Build failed',
+    task_save_failed: 'Task save failed',
+    deliverables_load_failed: 'Deliverables load failed',
+    activities_load_failed: 'Activity feed load failed',
     agent_error: 'Agent error',
   };
   return titles[type] || 'Something went wrong';
