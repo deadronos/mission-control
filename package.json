@@ -15,7 +15,8 @@
     "test:unit": "vitest",
     "test:unit:run": "vitest run",
     "coverage:unit": "vitest run --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "coverage:check": "node scripts/check-coverage.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1014.0",

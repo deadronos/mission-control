@@ -14,7 +14,7 @@ export default defineConfig({
     setupFiles: 'vitest.setup.ts',
     coverage: {
       provider: 'istanbul',
-      reporter: ['text', 'lcov'],
+      reporter: ['text', 'lcov', 'json-summary'],
       reportsDirectory: 'coverage/unit'
     }
   }
