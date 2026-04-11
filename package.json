@@ -50,6 +50,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/testing-library__react": "^10.0.1",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-istanbul": "^4.1.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.2",
