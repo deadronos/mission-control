@@ -97,12 +97,14 @@ describe('convoy', () => {
     expect(parent?.status).toBe('convoy_active');
 
     const loaded = getConvoy('convoy-parent-create');
+    expect(loaded).toBeDefined();
+    if (!loaded) return;
     expect(loaded?.subtasks).toHaveLength(2);
-    expect(loaded?.subtasks[1].depends_on).toEqual(['convoy-nonexistent-dependency']);
+    expect(loaded.subtasks[1].depends_on).toEqual(['convoy-nonexistent-dependency']);
 
     const dispatchable = getDispatchableSubtasks(convoy.id);
     expect(dispatchable).toHaveLength(1);
-    expect(dispatchable[0].task_id).toBe(loaded?.subtasks[0].task.id);
+    expect(dispatchable[0].task_id).toBe(loaded.subtasks[0].task.id);
 
     run(`UPDATE tasks SET status = 'done' WHERE id = ?`, [loaded?.subtasks[0].task.id]);
     run(`UPDATE tasks SET status = 'in_progress', status_reason = 'blocked' WHERE id = ?`, [loaded?.subtasks[1].task.id]);
@@ -130,7 +132,9 @@ describe('convoy', () => {
     });
 
     const loaded = getConvoy('convoy-parent-complete');
-    const subtaskId = loaded?.subtasks[0].task.id;
+    expect(loaded).toBeDefined();
+    if (!loaded) return;
+    const subtaskId = loaded.subtasks[0].task.id;
     run(`UPDATE tasks SET status = 'done' WHERE id = ?`, [subtaskId]);
 
     const completed = checkConvoyCompletion(convoy.id);
@@ -169,7 +173,12 @@ describe('convoy', () => {
     });
 
     const loaded = getConvoy('convoy-parent-fail');
-    const [firstId, secondId, thirdId] = loaded?.subtasks.map((subtask) => subtask.task.id) ?? [];
+    expect(loaded).toBeDefined();
+    if (!loaded) return;
+    const [firstId, secondId, thirdId] = loaded.subtasks.map((subtask) => {
+      expect(subtask.task).toBeDefined();
+      return subtask.task!.id;
+    });
 
     run(`UPDATE tasks SET status = 'in_progress', status_reason = 'broken' WHERE id = ?`, [firstId]);
     run(`UPDATE tasks SET status = 'in_progress', status_reason = 'broken' WHERE id = ?`, [secondId]);

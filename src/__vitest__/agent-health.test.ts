@@ -11,7 +11,7 @@ const {
   loggerMock,
 } = vi.hoisted(() => ({
   broadcastMock: vi.fn(),
-  buildCheckpointContextMock: vi.fn(() => null),
+  buildCheckpointContextMock: vi.fn<(taskId: string) => string | null>(() => null),
   endTaskSessionMock: vi.fn(),
   getMissionControlUrlMock: vi.fn(() => 'http://mission.local'),
   getApiTokenMock: vi.fn(() => undefined),

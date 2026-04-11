@@ -57,6 +57,7 @@ describe('checkpoint utilities', () => {
       'SELECT last_checkpoint_at, updated_at FROM agent_health WHERE agent_id = ?',
       [agentId]
     );
+    assert.ok(health);
     expect(health.last_checkpoint_at).not.toBeNull();
     expect(health.updated_at).toBe(health.last_checkpoint_at);
 
