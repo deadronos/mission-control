@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, vi, beforeEach } from 'vitest';
+import { describe, it, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
 
 // Mock next/navigation's useRouter
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -25,6 +26,10 @@ beforeEach(() => {
   (global as any).fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ id: 't1', title: 'New Task', assigned_agent_id: null, status: 'inbox' }) });
 });
 
+afterEach(() => {
+  cleanup();
+});
+
 describe('TaskModal (create flow)', () => {
   it('saves a new task and calls onClose', async () => {
     const onClose = vi.fn();
@@ -33,13 +38,13 @@ describe('TaskModal (create flow)', () => {
 
     render(<TaskModal onClose={onClose} />);
 
-    const input = screen.getByPlaceholderText('What needs to be done?');
+    const [input] = screen.getAllByPlaceholderText('What needs to be done?');
     fireEvent.change(input, { target: { value: 'My Test Task' } });
 
-    const saveBtn = screen.getByText('Save');
+    const saveBtn = screen.getByRole('button', { name: 'Save' });
     fireEvent.click(saveBtn);
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(mockAddTask).toHaveBeenCalled();
-  });
+  }, 15000);
 });

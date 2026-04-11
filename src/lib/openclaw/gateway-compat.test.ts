@@ -27,6 +27,24 @@ test('extractGatewaySessions supports current gateway envelope', () => {
   assert.deepEqual(result[0], { key: 'agent:main:main' });
 });
 
+test('extractGatewayAgents and sessions support nested result payloads', () => {
+  const agents = extractGatewayAgents({
+    result: {
+      agents: [{ id: 'nested-agent' }],
+    },
+  });
+  const sessions = extractGatewaySessions({
+    result: {
+      sessions: [{ id: 'nested-session' }],
+    },
+  });
+
+  assert.equal(agents.length, 1);
+  assert.deepEqual(agents[0], { id: 'nested-agent' });
+  assert.equal(sessions.length, 1);
+  assert.deepEqual(sessions[0], { id: 'nested-session' });
+});
+
 test('normalizeGatewayAgent handles modern OpenClaw agent payloads', () => {
   const normalized = normalizeGatewayAgent({
     id: 'main',
@@ -78,4 +96,23 @@ test('normalizeGatewayModel tolerates nested and legacy model shapes', () => {
 test('normalizeGatewayAgent rejects unusable payloads', () => {
   assert.equal(normalizeGatewayAgent(null), null);
   assert.equal(normalizeGatewayAgent({ model: { primary: 'x' } }), null);
+});
+
+test('normalizeGatewayAgent prefers label and trims fields', () => {
+  const normalized = normalizeGatewayAgent({
+    id: '  agent-7  ',
+    label: '  Support Bot  ',
+    channel: '  slack  ',
+    status: '  active  ',
+    model: '  openai/gpt-4o  ',
+  });
+
+  assert.deepEqual(normalized, {
+    id: 'agent-7',
+    name: 'Support Bot',
+    label: 'Support Bot',
+    model: 'openai/gpt-4o',
+    channel: 'slack',
+    status: 'active',
+  });
 });

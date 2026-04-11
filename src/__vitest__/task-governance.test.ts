@@ -1,6 +1,6 @@
-import test from 'node:test';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { run, queryOne } from './db';
+import { run, queryOne } from '@/lib/db';
 import {
   hasStageEvidence,
   canUseBoardOverride,
@@ -11,7 +11,7 @@ import {
   isActiveStatus,
   escalateFailureIfNeeded,
   pickDynamicAgent,
-} from './task-governance';
+} from '@/lib/task-governance';
 
 function seedTask(id: string, workspace = 'default') {
   run(
@@ -245,7 +245,6 @@ test('pickDynamicAgent prefers planning agents and falls back to role-matched ag
   const planningTaskId = crypto.randomUUID();
   const fallbackTaskId = crypto.randomUUID();
   const planningAgentId = crypto.randomUUID();
-  const fallbackAgentId = crypto.randomUUID();
 
   run(
     `INSERT OR IGNORE INTO workspaces (id, name, slug)
@@ -274,6 +273,7 @@ test('pickDynamicAgent prefers planning agents and falls back to role-matched ag
   const skippedTaskId = crypto.randomUUID();
   const skippedPlanningAgentId = crypto.randomUUID();
   const fallbackRoleAgentId = crypto.randomUUID();
+  const globalFallbackAgentId = crypto.randomUUID();
   const fallbackRole = 'qa-fallback';
 
   run(
@@ -307,17 +307,17 @@ test('pickDynamicAgent prefers planning agents and falls back to role-matched ag
   );
   run(
     `INSERT INTO agents (id, name, role, status, is_master, workspace_id, source, created_at, updated_at)
-     VALUES (?, 'Fallback QA', 'qa', 'working', 0, 'default', 'local', datetime('now'), datetime('now'))`,
-    [fallbackAgentId]
+     VALUES (?, 'Fallback Builder', 'qa', 'working', 0, 'default', 'local', datetime('now'), datetime('now'))`,
+    [globalFallbackAgentId]
   );
 
   assert.deepEqual(pickDynamicAgent(fallbackTaskId, 'qa'), {
-    id: fallbackAgentId,
-    name: 'Fallback QA',
+    id: globalFallbackAgentId,
+    name: 'Fallback Builder',
   });
 
   run('DELETE FROM tasks WHERE id IN (?, ?)', [planningTaskId, fallbackTaskId]);
   run('DELETE FROM tasks WHERE id = ?', [skippedTaskId]);
-  run('DELETE FROM agents WHERE id IN (?, ?, ?)', [planningAgentId, fallbackAgentId, skippedPlanningAgentId]);
+  run('DELETE FROM agents WHERE id IN (?, ?, ?)', [planningAgentId, globalFallbackAgentId, skippedPlanningAgentId]);
   run('DELETE FROM agents WHERE id = ?', [fallbackRoleAgentId]);
 });
