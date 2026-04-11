@@ -15,6 +15,8 @@ vi.mock('@/lib/store', () => ({
 }));
 
 const triggerAutoDispatchMock = vi.fn();
+// Make the mock return a promise so code that calls .catch() is safe
+triggerAutoDispatchMock.mockResolvedValue(undefined);
 vi.mock('@/lib/auto-dispatch', () => ({ triggerAutoDispatch: triggerAutoDispatchMock, shouldTriggerAutoDispatch: vi.fn(() => false) }));
 
 describe('TaskModal assign & auto-dispatch', () => {
