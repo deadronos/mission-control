@@ -20,7 +20,7 @@ describe('MaybePool', () => {
   });
 
   it('renders entries returned by API', async () => {
-    const entry = { id: 'e1', evaluation_count: 1, idea: { id: 'i1', title: 'Test Idea' }, idea_id: 'i1', next_evaluate_at: null };
+    const entry = { id: 'e1', evaluation_count: 1, idea: { id: 'i1', title: 'Test Idea', description: 'A short description' }, idea_id: 'i1', next_evaluate_at: null };
     (global.fetch as unknown as jest.Mock).mockResolvedValueOnce({ ok: true, json: async () => [entry] });
 
     render(<MaybePool productId="p1" />);

@@ -30,8 +30,8 @@ describe('ToastProvider', () => {
 
     fireEvent.click(screen.getByText('Add'));
     const title = await screen.findByText('Saved!');
-    const container = title.closest('div');
-    // dismiss button is the last button inside the toast item
+    const container = title.closest('.animate-slide-in') || title.parentElement?.parentElement;
+    // dismiss button is inside the toast container
     const buttons = container?.querySelectorAll('button');
     const dismiss = buttons ? buttons[buttons.length - 1] as HTMLElement : null;
     if (!dismiss) throw new Error('dismiss button not found');
