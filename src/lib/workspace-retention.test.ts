@@ -5,6 +5,7 @@ import { shouldRetainWorkspace } from './workspace-retention';
 test('shouldRetainWorkspace keeps active tasks and done tasks with pending merges', () => {
   assert.equal(shouldRetainWorkspace({ status: 'assigned' }), true);
   assert.equal(shouldRetainWorkspace({ status: 'in_progress' }), true);
+  assert.equal(shouldRetainWorkspace({ status: 'convoy_active' }), true);
   assert.equal(shouldRetainWorkspace({ status: 'testing' }), true);
   assert.equal(shouldRetainWorkspace({ status: 'review' }), true);
   assert.equal(shouldRetainWorkspace({ status: 'verification' }), true);
