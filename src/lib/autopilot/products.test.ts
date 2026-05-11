@@ -191,3 +191,36 @@ test('hardDeleteProduct removes product subtree and task-linked rows', () => {
     assert.equal(row?.c, 0, `${label} rows should be removed`);
   }
 });
+
+test('hardDeleteProduct idles agents assigned only to review tasks for the product', () => {
+  run(`INSERT OR IGNORE INTO workspaces (id, name, slug) VALUES ('default', 'Default Workspace', 'default')`);
+
+  const product = createProduct({
+    name: 'Review Delete Me',
+    description: 'Product with review work assigned',
+  });
+  const now = new Date().toISOString();
+
+  run(`INSERT INTO agents (id, name, role, workspace_id, status) VALUES (?, 'Review Agent', 'reviewer', 'default', 'working')`, [
+    'agent-review-delete',
+  ]);
+  run(`INSERT INTO tasks (id, title, product_id, workspace_id, assigned_agent_id, status) VALUES (?, ?, ?, 'default', ?, 'review')`, [
+    'task-review-delete',
+    'Review task tied to product',
+    product.id,
+    'agent-review-delete',
+  ]);
+  run(`INSERT INTO openclaw_sessions (id, agent_id, task_id, openclaw_session_id, channel, status, session_type, created_at, updated_at) VALUES (?, ?, ?, 'session-review-delete', 'test', 'active', 'persistent', ?, ?)`, [
+    'session-review-delete',
+    'agent-review-delete',
+    'task-review-delete',
+    now,
+    now,
+  ]);
+
+  const deleted = hardDeleteProduct(product.id);
+
+  assert.equal(deleted, true, 'hard delete should succeed');
+  const agent = queryOne<{ status: string }>('SELECT status FROM agents WHERE id = ?', ['agent-review-delete']);
+  assert.equal(agent?.status, 'standby', 'review-only product work should not leave the agent working');
+});

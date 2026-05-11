@@ -46,7 +46,7 @@ function stopRunningProductTasks(productId: string, now: string): Set<string> {
      FROM tasks
      WHERE product_id = ?
        AND assigned_agent_id IS NOT NULL
-       AND status IN ('assigned', 'in_progress', 'convoy_active', 'testing', 'verification')`,
+       AND status IN ('assigned', 'in_progress', 'convoy_active', 'testing', 'review', 'verification')`,
     [productId]
   );
 
@@ -65,7 +65,7 @@ function resetAgentStatusIfIdle(agentIds: Set<string>, now: string): void {
       `SELECT COUNT(*) as count
        FROM tasks
        WHERE assigned_agent_id = ?
-         AND status IN ('assigned', 'in_progress', 'convoy_active', 'testing', 'verification')`,
+         AND status IN ('assigned', 'in_progress', 'convoy_active', 'testing', 'review', 'verification')`,
       [agentId]
     );
 

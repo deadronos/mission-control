@@ -138,6 +138,23 @@ test('cleanupTaskBeforeDeletion keeps the agent working when another active task
   db.close();
 });
 
+test('cleanupTaskBeforeDeletion keeps the agent working when another review task remains', async () => {
+  const db = await createTestDb();
+  const now = '2026-04-07T10:00:00.000Z';
+
+  db.prepare(`INSERT INTO agents (id, status) VALUES (?, ?)`).run('agent-1', 'working');
+  db.prepare(`INSERT INTO tasks (id, title, assigned_agent_id, status) VALUES (?, ?, ?, ?)`).run('task-1', 'Task 1', 'agent-1', 'in_progress');
+  db.prepare(`INSERT INTO tasks (id, title, assigned_agent_id, status) VALUES (?, ?, ?, ?)`).run('task-2', 'Task 2', 'agent-1', 'review');
+  db.prepare(`INSERT INTO openclaw_sessions (id, agent_id, task_id, status, created_at, updated_at) VALUES (?, ?, ?, 'active', ?, ?)`).run('session-1', 'agent-1', 'task-1', now, now);
+
+  cleanupTaskBeforeDeletion(db, { id: 'task-1', assigned_agent_id: 'agent-1' }, now);
+
+  const agent = db.prepare(`SELECT status FROM agents WHERE id = ?`).get('agent-1') as { status: string };
+  assert.equal(agent.status, 'working');
+
+  db.close();
+});
+
 test('cleanupTaskBeforeDeletion clears task-linked rows even when the task is unassigned', async () => {
   const db = await createTestDb();
   const now = '2026-04-07T10:00:00.000Z';

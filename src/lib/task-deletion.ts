@@ -71,7 +71,7 @@ export function cleanupTaskBeforeDeletion(db: CleanupDb, task: DeletableTask, no
     const otherActive = db.prepare(
       `SELECT COUNT(*) as count FROM tasks
        WHERE assigned_agent_id = ?
-         AND status IN ('assigned', 'in_progress', 'convoy_active', 'testing', 'verification')
+         AND status IN ('assigned', 'in_progress', 'convoy_active', 'testing', 'review', 'verification')
          AND id != ?`
     ).get(task.assigned_agent_id, task.id) as { count: number } | undefined;
 
